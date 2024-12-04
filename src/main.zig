@@ -15,6 +15,7 @@ pub fn main() !void {
 
     // Write the pixels
     for (0..imgHeight) |j| {
+        std.log.info("\rScanlines remaining: {d} ", .{imgHeight - j});
         for (0..imgWidth) |i| {
             const r: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(imgWidth - 1));
             const g: f32 = @as(f32, @floatFromInt(j)) / @as(f32, @floatFromInt(imgHeight - 1));
@@ -27,6 +28,7 @@ pub fn main() !void {
             _ = try writer.print("{d} {d} {d}\n", .{ ir, ig, ib });
         }
     }
+    std.log.info("\rDone.           \n", .{});
 
     try bw.flush();
 }
