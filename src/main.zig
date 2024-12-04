@@ -24,9 +24,8 @@ pub fn main() !void {
             const ig: usize = @intFromFloat(255.999 * g);
             const ib: usize = @intFromFloat(255.999 * b);
 
-            _ = try writer.print("{d} {d} {d}", .{ ir, ig, ib });
+            _ = try writer.print("{d} {d} {d}\n", .{ ir, ig, ib });
         }
-        _ = try writer.print("\n", .{});
     }
 
     try bw.flush();
