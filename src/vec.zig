@@ -1,9 +1,8 @@
 const std = @import("std");
 
 const Point3 = Vec3;
-const Color3 = Vec3;
 
-pub const Vec3 = struct {
+pub const Vec3 = packed struct {
     v: @Vector(3, f64),
 
     pub fn init(vx: f64, vy: f64, vz: f64) Vec3 {
@@ -100,6 +99,9 @@ test "init()" {
     try std.testing.expectEqual(1.0, v.v[0]);
     try std.testing.expectEqual(0.0, v.v[1]);
     try std.testing.expectEqual(2.0, v.v[2]);
+
+    // Ensure the Vec3 is packed
+    try std.testing.expectEqual(64 * 3, @bitSizeOf(Vec3));
 }
 
 test "zero()" {
@@ -217,17 +219,12 @@ test "unit()" {
     try std.testing.expectEqual((2.0 / len), v.z());
 }
 
-test "Point3 and Color3 aliases" {
+test "Point3 alias" {
     const p = Point3.zero();
-    const c = Color3.init(0.5, 0.5, 0.5);
 
     try std.testing.expectEqual(0, p.x());
     try std.testing.expectEqual(0, p.y());
     try std.testing.expectEqual(0, p.z());
-
-    try std.testing.expectEqual(0.5, c.x());
-    try std.testing.expectEqual(0.5, c.y());
-    try std.testing.expectEqual(0.5, c.z());
 }
 
 test "format()" {
