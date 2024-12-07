@@ -1,6 +1,5 @@
 const std = @import("std");
-
-const Point3 = Vec3;
+pub const Point3 = Vec3;
 
 pub const Vec3 = packed struct {
     v: @Vector(3, f64),
