@@ -64,7 +64,7 @@ pub fn main() !void {
     std.log.info("\rDone.\n", .{});
 
     // Save the file
-    try ppm.save("images/chapter4.ppm");
+    try ppm.saveBinary("images/chapter4.ppm");
 }
 
 test "main" {
