@@ -17,18 +17,31 @@ const Allocator = std.mem.Allocator;
 /// (-td + (C - Q))*(-td + (C - Q)) = r^2
 /// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) = r^2
 /// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) - r^2 = 0
+///
+/// We can further simplify the code to assume b = -2h:
+/// (-(-2h) +- sqrt((-2h)^2-4ac))/2a
+/// (2h +- 2sqrt(h^2-ac))/2a
+/// (h +- sqrt(h^2-ac))/a
+///
+/// To solve for h:
+/// b = -2d*(C - Q)
+/// b = -2h
+/// h = b/-2 = d*(C - Q)
+///
+/// Also, d*d (dot product of vector to itself) is the same as
+/// d.lenSquared()
 fn hitSphere(center: Point3, radius: f64, r: Ray) ?f64 {
     const oc: Vec3 = center.sub(r.orig);
 
-    const a = r.dir.dot(r.dir);
-    const b = -2.0 * r.dir.dot(oc);
-    const c = oc.dot(oc) - radius * radius;
+    const a = r.dir.lenSquared();
+    const h = r.dir.dot(oc);
+    const c = oc.lenSquared() - radius * radius;
 
-    const discriminant = b * b - 4 * a * c;
+    const discriminant = h * h - a * c;
     if (discriminant < 0) {
         return null;
     } else {
-        return (-b - std.math.sqrt(discriminant)) / (2.0 * a);
+        return (h - std.math.sqrt(discriminant)) / a;
     }
 }
 
