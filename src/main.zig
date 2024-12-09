@@ -6,7 +6,19 @@ const Point3 = @import("vec.zig").Point3;
 const Vec3 = @import("vec.zig").Vec3;
 const Allocator = std.mem.Allocator;
 
+fn hitSphere(center: Point3, radius: f64, r: Ray) bool {
+    const oc: Vec3 = center.sub(r.orig);
+    const a = r.dir.dot(r.dir);
+    const b = -2.0 * r.dir.dot(oc);
+    const c = oc.dot(oc) - radius * radius;
+    const discriminant = b * b - 4 * a * c;
+    return discriminant >= 0;
+}
+
 fn rayColor(r: Ray) Color {
+    // If we hit the sphere, return red
+    if (hitSphere(Point3.init(0, 0, -1), 0.5, r)) return Color.init(1, 0, 0);
+
     const unitDir = r.dir.unit(); // Normalize between -1 and 1
     const a = 0.5 * (unitDir.y() + 1.0); // Shift "up" by 1 and then divide in half to make it between 0 - 1
     // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes, gradient changes from blue to white
@@ -65,16 +77,16 @@ pub fn main() !void {
     std.log.info("\rDone.\n", .{});
 
     // Save the file
-    try ppm.saveBinary("images/chapter4.ppm");
+    try ppm.saveBinary("images/chapter5.ppm");
 }
 
 test "main" {
     try main();
 
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter4.ppm", 1.5e6);
+    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter5.ppm", 5e5);
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter4.ppm", 1.5e6);
+    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter5.ppm", 5e5);
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);
