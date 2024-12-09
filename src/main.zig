@@ -17,7 +17,7 @@ const Allocator = std.mem.Allocator;
 /// (-td + (C - Q))*(-td + (C - Q)) = r^2
 /// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) = r^2
 /// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) - r^2 = 0
-fn hitSphere(center: Point3, radius: f64, r: Ray) f64 {
+fn hitSphere(center: Point3, radius: f64, r: Ray) ?f64 {
     const oc: Vec3 = center.sub(r.orig);
 
     const a = r.dir.dot(r.dir);
@@ -26,7 +26,7 @@ fn hitSphere(center: Point3, radius: f64, r: Ray) f64 {
 
     const discriminant = b * b - 4 * a * c;
     if (discriminant < 0) {
-        return -1.0;
+        return null;
     } else {
         return (-b - std.math.sqrt(discriminant)) / (2.0 * a);
     }
@@ -34,8 +34,8 @@ fn hitSphere(center: Point3, radius: f64, r: Ray) f64 {
 
 fn rayColor(r: Ray) Color {
     // Find the point where we hit the sphere
-    const t = hitSphere(Point3.init(0, 0, -1), 0.5, r);
-    if (t > 0.0) {
+    const maybeT = hitSphere(Point3.init(0, 0, -1), 0.5, r);
+    if (maybeT) |t| {
         const n: Vec3 = r.at(t)
             .sub(Vec3.init(0, 0, -1))
             .unit()
