@@ -7,8 +7,9 @@ const Vec3 = @import("vec.zig").Vec3;
 const Allocator = std.mem.Allocator;
 
 fn rayColor(r: Ray) Color {
-    const unitDir = r.dir.unit();
-    const a = 0.5 * (unitDir.y() + 1.0);
+    const unitDir = r.dir.unit(); // Normalize between -1 and 1
+    const a = 0.5 * (unitDir.y() + 1.0); // Shift "up" by 1 and then divide in half to make it between 0 - 1
+    // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes, gradient changes from blue to white
     const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
         .add(Color.init(0.5, 0.7, 1.0).pixel.mulScalar(a));
     return Color.init(vec.x(), vec.y(), vec.z());
@@ -39,11 +40,11 @@ pub fn main() !void {
     const dv = vv.divScalar(@floatFromInt(imgHeight));
 
     // Calculate location of the upper left pixel
-    const viewUpperLeft = cameraCenter
-        .sub(Vec3.init(0, 0, focalLen))
-        .sub(vu.divScalar(2))
-        .sub(vv.divScalar(2));
-    const pixel0 = viewUpperLeft.add(du.add(dv).mulScalar(0.5));
+    const viewUpperLeft = cameraCenter // (0, 0, 0)
+        .sub(Vec3.init(0, 0, focalLen)) // (0, 0, -1)
+        .sub(vu.divScalar(2)) // (-1.777.., 0, -1)
+        .sub(vv.divScalar(2)); // (-1.777..., -2.0, -1)
+    const pixel0 = viewUpperLeft.add(du.add(dv).mulScalar(0.5)); // Inset by half a pixel
 
     // Setup Image/PPM
     var ppm = PPM.init(allocator, imgWidth, imgHeight);
@@ -56,7 +57,7 @@ pub fn main() !void {
             const pixelCenter = pixel0
                 .add(du.mulScalar(@floatFromInt(i)))
                 .add(dv.mulScalar(@floatFromInt(j)));
-            const rayDir = pixelCenter.sub(cameraCenter);
+            const rayDir = pixelCenter.sub(cameraCenter); // We don't really need to subtract (0, 0, 0) from the pixel center
             const ray = Ray.init(cameraCenter, rayDir);
             ppm.pixels[i + j * ppm.width] = rayColor(ray);
         }
