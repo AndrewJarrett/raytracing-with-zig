@@ -6,9 +6,9 @@ const Point3 = @import("vec.zig").Point3;
 const Vec3 = @import("vec.zig").Vec3;
 const Allocator = std.mem.Allocator;
 
-/// To determine if we hit a sphere, we solve the quadratic equation's discriminant.
-/// If the discriminant is positive, there are two solutions. If it is zero, there
-/// is one real solution. If it is negative, then there are no solutions (return false).
+/// To determine where we hit a sphere, we solve the quadratic equation's discriminant.
+/// If the discriminant is positive or zero, there are two solutions and we must solve the
+/// equation. If it is negative, then there are no solutions (return -1.0).
 /// We are trying to solve this equation:
 /// (C_x - x)^2 + (C_y - y)^2 + (C_z - z)^2 = r^2
 /// (C - P)*(C - P) = r^2
@@ -17,18 +17,45 @@ const Allocator = std.mem.Allocator;
 /// (-td + (C - Q))*(-td + (C - Q)) = r^2
 /// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) = r^2
 /// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) - r^2 = 0
-fn hitSphere(center: Point3, radius: f64, r: Ray) bool {
+///
+/// We can further simplify the code to assume b = -2h:
+/// (-(-2h) +- sqrt((-2h)^2-4ac))/2a
+/// (2h +- 2sqrt(h^2-ac))/2a
+/// (h +- sqrt(h^2-ac))/a
+///
+/// To solve for h:
+/// b = -2d*(C - Q)
+/// b = -2h
+/// h = b/-2 = d*(C - Q)
+///
+/// Also, d*d (dot product of vector to itself) is the same as
+/// d.lenSquared()
+fn hitSphere(center: Point3, radius: f64, r: Ray) ?f64 {
     const oc: Vec3 = center.sub(r.orig);
-    const a = r.dir.dot(r.dir);
-    const b = -2.0 * r.dir.dot(oc);
-    const c = oc.dot(oc) - radius * radius;
-    const discriminant = b * b - 4 * a * c;
-    return discriminant >= 0;
+
+    const a = r.dir.lenSquared();
+    const h = r.dir.dot(oc);
+    const c = oc.lenSquared() - radius * radius;
+
+    const discriminant = h * h - a * c;
+    if (discriminant < 0) {
+        return null;
+    } else {
+        return (h - std.math.sqrt(discriminant)) / a;
+    }
 }
 
 fn rayColor(r: Ray) Color {
-    // If we hit the sphere, return red
-    if (hitSphere(Point3.init(0, 0, -1), 0.5, r)) return Color.init(1, 0, 0);
+    // Find the point where we hit the sphere
+    const maybeT = hitSphere(Point3.init(0, 0, -1), 0.5, r);
+    if (maybeT) |t| {
+        const n: Vec3 = r.at(t)
+            .sub(Vec3.init(0, 0, -1))
+            .unit()
+            .add(Vec3.init(1, 1, 1))
+            .mulScalar(0.5);
+        return Color.init(n.x(), n.y(), n.z());
+    }
 
     const unitDir = r.dir.unit(); // Normalize between -1 and 1
     const a = 0.5 * (unitDir.y() + 1.0); // Shift "up" by 1 and then divide in half to make it between 0 - 1
@@ -88,16 +115,16 @@ pub fn main() !void {
     std.log.info("\rDone.\n", .{});
 
     // Save the file
-    try ppm.saveBinary("images/chapter5.ppm");
+    try ppm.saveBinary("images/chapter6.ppm");
 }
 
 test "main" {
     try main();
 
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter5.ppm", 5e5);
+    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter6.ppm", 5e5);
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter5.ppm", 5e5);
+    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter6.ppm", 5e5);
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);
