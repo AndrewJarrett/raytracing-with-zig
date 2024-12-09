@@ -6,6 +6,17 @@ const Point3 = @import("vec.zig").Point3;
 const Vec3 = @import("vec.zig").Vec3;
 const Allocator = std.mem.Allocator;
 
+/// To determine if we hit a sphere, we solve the quadratic equation's discriminant.
+/// If the discriminant is positive, there are two solutions. If it is zero, there
+/// is one real solution. If it is negative, then there are no solutions (return false).
+/// We are trying to solve this equation:
+/// (C_x - x)^2 + (C_y - y)^2 + (C_z - z)^2 = r^2
+/// (C - P)*(C - P) = r^2
+/// (C - P(t))*(C - P(t)) = r^2
+/// (C - (Q + td))*(C - (Q + td)) = r^2
+/// (-td + (C - Q))*(-td + (C - Q)) = r^2
+/// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) = r^2
+/// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) - r^2 = 0
 fn hitSphere(center: Point3, radius: f64, r: Ray) bool {
     const oc: Vec3 = center.sub(r.orig);
     const a = r.dir.dot(r.dir);
