@@ -61,7 +61,7 @@ pub const Vec3 = packed struct {
     }
 
     pub fn len(self: Vec3) f64 {
-        return std.math.sqrt(self.lenSquared());
+        return @sqrt(self.lenSquared());
     }
 
     pub fn lenSquared(self: Vec3) f64 {
@@ -183,7 +183,7 @@ test "divScalar()" {
 
 test "len()" {
     const len = Vec3.init(1.0, 0.0, 2.0).len();
-    try std.testing.expectEqual(std.math.sqrt(5.0), len);
+    try std.testing.expectEqual(@sqrt(5.0), len);
 }
 
 test "lenSquared()" {
@@ -211,7 +211,7 @@ test "cross()" {
 
 test "unit()" {
     const v = Vec3.init(1.0, 0.0, 2.0).unit();
-    const len = std.math.sqrt(5.0);
+    const len = @sqrt(5.0);
 
     try std.testing.expectEqual((1.0 / len), v.x());
     try std.testing.expectEqual(0.0, v.y());

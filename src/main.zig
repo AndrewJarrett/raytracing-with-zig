@@ -41,7 +41,7 @@ fn hitSphere(center: Point3, radius: f64, r: Ray) ?f64 {
     if (discriminant < 0) {
         return null;
     } else {
-        return (h - std.math.sqrt(discriminant)) / a;
+        return (h - @sqrt(discriminant)) / a;
     }
 }
 
