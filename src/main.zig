@@ -1,36 +1,29 @@
 const std = @import("std");
+
 const PPM = @import("ppm.zig").PPM;
 const Color = @import("color.zig").Color;
+const Color3 = @import("color.zig").Color3;
 const Ray = @import("ray.zig").Ray;
 const Point3 = @import("vec.zig").Point3;
 const Vec3 = @import("vec.zig").Vec3;
+const Sphere = @import("sphere.zig").Sphere;
+const Hittable = @import("hittable.zig").Hittable;
+const HittableList = @import("hittable.zig").HittableList;
+const Interval = @import("interval.zig").Interval;
+
 const Allocator = std.mem.Allocator;
 
-/// To determine if we hit a sphere, we solve the quadratic equation's discriminant.
-/// If the discriminant is positive, there are two solutions. If it is zero, there
-/// is one real solution. If it is negative, then there are no solutions (return false).
-/// We are trying to solve this equation:
-/// (C_x - x)^2 + (C_y - y)^2 + (C_z - z)^2 = r^2
-/// (C - P)*(C - P) = r^2
-/// (C - P(t))*(C - P(t)) = r^2
-/// (C - (Q + td))*(C - (Q + td)) = r^2
-/// (-td + (C - Q))*(-td + (C - Q)) = r^2
-/// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) = r^2
-/// t^2d*d - 2td*(C - Q) + (C - Q)*(C - Q) - r^2 = 0
-fn hitSphere(center: Point3, radius: f64, r: Ray) bool {
-    const oc: Vec3 = center.sub(r.orig);
-    const a = r.dir.dot(r.dir);
-    const b = -2.0 * r.dir.dot(oc);
-    const c = oc.dot(oc) - radius * radius;
-    const discriminant = b * b - 4 * a * c;
-    return discriminant >= 0;
-}
+const inf = std.math.inf(f64);
 
-fn rayColor(r: Ray) Color {
-    // If we hit the sphere, return red
-    if (hitSphere(Point3.init(0, 0, -1), 0.5, r)) return Color.init(1, 0, 0);
+fn rayColor(ray: Ray, world: HittableList) Color {
+    // Find the point where we hit the sphere
+    const hitRecord = world.hit(ray, Interval.init(0, inf));
+    if (hitRecord) |rec| {
+        const n: Vec3 = rec.normal.add(Color3.init(1, 1, 1)).mulScalar(0.5);
+        return Color.init(n.x(), n.y(), n.z());
+    }
 
-    const unitDir = r.dir.unit(); // Normalize between -1 and 1
+    const unitDir = ray.dir.unit(); // Normalize between -1 and 1
     const a = 0.5 * (unitDir.y() + 1.0); // Shift "up" by 1 and then divide in half to make it between 0 - 1
     // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes, gradient changes from blue to white
     const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
@@ -48,6 +41,11 @@ pub fn main() !void {
     const imgWidth = 400;
     var imgHeight: usize = @intFromFloat(@as(f64, @floatFromInt(imgWidth)) / aspectRatio);
     imgHeight = if (imgHeight < 1) 1 else imgHeight;
+
+    // World
+    var world = HittableList.init(allocator);
+    world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, 0, -1), .radius = 0.5 }));
+    world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, -100.5, -1), .radius = 100 }));
 
     // Camera / viewport
     const focalLen = 1.0;
@@ -82,22 +80,22 @@ pub fn main() !void {
                 .add(dv.mulScalar(@floatFromInt(j)));
             const rayDir = pixelCenter.sub(cameraCenter); // We don't really need to subtract (0, 0, 0) from the pixel center
             const ray = Ray.init(cameraCenter, rayDir);
-            ppm.pixels[i + j * ppm.width] = rayColor(ray);
+            ppm.pixels[i + j * ppm.width] = rayColor(ray, world);
         }
     }
     std.log.info("\rDone.\n", .{});
 
     // Save the file
-    try ppm.saveBinary("images/chapter5.ppm");
+    try ppm.saveBinary("images/chapter6.ppm");
 }
 
 test "main" {
     try main();
 
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter5.ppm", 5e5);
+    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter6.ppm", 5e5);
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter5.ppm", 5e5);
+    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter6.ppm", 5e5);
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);

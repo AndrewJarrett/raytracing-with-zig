@@ -1,7 +1,7 @@
 const std = @import("std");
 const Vec3 = @import("vec.zig").Vec3;
 
-const Color3 = Vec3;
+pub const Color3 = Vec3;
 
 /// Holds the RGB values for a pixel's color
 pub const RGB = packed struct {
