@@ -3,6 +3,7 @@ const Vec3 = @import("vec.zig").Vec3;
 const Point3 = @import("vec.zig").Point3;
 const Ray = @import("ray.zig").Ray;
 const Sphere = @import("sphere.zig").Sphere;
+const Interval = @import("interval.zig").Interval;
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
@@ -27,9 +28,9 @@ pub const Hittable = union(HittableType) {
         };
     }
 
-    pub fn hit(self: Hittable, ray: Ray, tMin: f64, tMax: f64) ?HitRecord {
+    pub fn hit(self: Hittable, ray: Ray, t: Interval) ?HitRecord {
         return switch (self) {
-            .sphere => |s| s.hit(ray, tMin, tMax), // Doh!
+            .sphere => |s| s.hit(ray, t), // Doh!
         };
     }
 };
@@ -56,12 +57,12 @@ pub const HittableList = struct {
         self.objects.append(object) catch unreachable;
     }
 
-    pub fn hit(self: HittableList, ray: Ray, tMin: f64, tMax: f64) ?HitRecord {
+    pub fn hit(self: HittableList, ray: Ray, t: Interval) ?HitRecord {
         var hitRecord: ?HitRecord = null;
-        var closest = tMax;
+        var closest = t.max;
 
         for (self.objects.items) |item| {
-            const tempRecord = item.hit(ray, tMin, closest);
+            const tempRecord = item.hit(ray, Interval.init(t.min, closest));
             if (tempRecord) |rec| {
                 hitRecord = rec;
                 closest = rec.t;
@@ -105,7 +106,7 @@ test "Hittable.hit()" {
     const hittable = Hittable.init(.sphere, sphere);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
-    const hitRecord = hittable.hit(ray, 0.0, 3.0);
+    const hitRecord = hittable.hit(ray, Interval.init(0.0, 3.0));
 
     try std.testing.expect(hitRecord != null);
     try std.testing.expectEqual(1, hitRecord.?.t);
@@ -151,7 +152,7 @@ test "HittableList.hit()" {
     hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -5), .radius = 1.0 }));
 
     const ray: Ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
-    const hitRecord = hl.hit(ray, -6, 6);
+    const hitRecord = hl.hit(ray, Interval.init(-6, 6));
 
     try std.testing.expect(hitRecord != null);
     try std.testing.expectEqual(1, hitRecord.?.t);

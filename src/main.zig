@@ -9,6 +9,7 @@ const Vec3 = @import("vec.zig").Vec3;
 const Sphere = @import("sphere.zig").Sphere;
 const Hittable = @import("hittable.zig").Hittable;
 const HittableList = @import("hittable.zig").HittableList;
+const Interval = @import("interval.zig").Interval;
 
 const Allocator = std.mem.Allocator;
 
@@ -16,7 +17,7 @@ const inf = std.math.inf(f64);
 
 fn rayColor(ray: Ray, world: HittableList) Color {
     // Find the point where we hit the sphere
-    const hitRecord = world.hit(ray, 0, inf);
+    const hitRecord = world.hit(ray, Interval.init(0, inf));
     if (hitRecord) |rec| {
         const n: Vec3 = rec.normal.add(Color3.init(1, 1, 1)).mulScalar(0.5);
         return Color.init(n.x(), n.y(), n.z());

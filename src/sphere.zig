@@ -3,6 +3,7 @@ const Ray = @import("ray.zig").Ray;
 const Vec3 = @import("vec.zig").Vec3;
 const Point3 = @import("vec.zig").Point3;
 const HitRecord = @import("hittable.zig").HitRecord;
+const Interval = @import("interval.zig").Interval;
 
 pub const Sphere = struct {
     center: Point3,
@@ -15,7 +16,7 @@ pub const Sphere = struct {
         };
     }
 
-    pub fn hit(self: Sphere, ray: Ray, tMin: f64, tMax: f64) ?HitRecord {
+    pub fn hit(self: Sphere, ray: Ray, t: Interval) ?HitRecord {
         const oc: Vec3 = self.center.sub(ray.orig);
         const a = ray.dir.lenSquared();
         const h = ray.dir.dot(oc);
@@ -29,9 +30,9 @@ pub const Sphere = struct {
         // Find the nearest spot that lies in the acceptable range.
         var root = (h - sqrtd) / a;
         //std.debug.print("a: {d}; h: {d}; c: {d}; discriminant: {d}; sqrtd: {d}; root: {d}; tMin: {d}; tMax: {d}\n", .{ a, h, c, discriminant, sqrtd, root, tMin, tMax });
-        if (root <= tMin or tMax <= root) {
+        if (!t.surrounds(root)) {
             root = (h + sqrtd) / a;
-            if (root <= tMin or tMax <= root) return null;
+            if (!t.surrounds(root)) return null;
         }
 
         const point = ray.at(root);
@@ -62,7 +63,7 @@ test "hit() success" {
     const sphere = Sphere.init(center, radius);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
-    const hitRecord = sphere.hit(ray, 0.0, 3.0);
+    const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
 
     try std.testing.expect(hitRecord != null);
     try std.testing.expectEqual(1, hitRecord.?.t);
@@ -77,7 +78,7 @@ test "hit() hit out of range" {
     const sphere = Sphere.init(center, radius);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
-    const hitRecord = sphere.hit(ray, 0.0, 0.0);
+    const hitRecord = sphere.hit(ray, Interval.init(0.0, 0.0));
     try std.testing.expect(hitRecord == null);
 }
 
@@ -87,6 +88,6 @@ test "hit() no hit" {
     const sphere = Sphere.init(center, radius);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, 1));
-    const hitRecord = sphere.hit(ray, 0.0, 3.0);
+    const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
     try std.testing.expect(hitRecord == null);
 }
