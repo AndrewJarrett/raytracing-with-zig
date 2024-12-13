@@ -10,6 +10,7 @@ const Sphere = @import("sphere.zig").Sphere;
 const Hittable = @import("hittable.zig").Hittable;
 const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
+const Camera = @import("camera.zig").Camera;
 
 const Allocator = std.mem.Allocator;
 
@@ -36,57 +37,18 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    // Figure out aspect ratio, image width, and height
-    const aspectRatio = 16.0 / 9.0;
-    const imgWidth = 400;
-    var imgHeight: usize = @intFromFloat(@as(f64, @floatFromInt(imgWidth)) / aspectRatio);
-    imgHeight = if (imgHeight < 1) 1 else imgHeight;
-
     // World
     var world = HittableList.init(allocator);
     world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, 0, -1), .radius = 0.5 }));
     world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, -100.5, -1), .radius = 100 }));
 
-    // Camera / viewport
-    const focalLen = 1.0;
-    const viewportHeight: f64 = 2.0;
-    const viewportWidth: f64 =
-        viewportHeight * (@as(f64, @floatFromInt(imgWidth)) / @as(f64, @floatFromInt(imgHeight)));
-    const cameraCenter = Point3.init(0, 0, 0);
+    // Camera
+    const imgWidth = 400;
+    const aspectRatio = 16.0 / 9.0;
+    const camera = Camera.init(imgWidth, aspectRatio);
 
-    // Viewport vectors
-    const vu = Vec3.init(viewportWidth, 0, 0);
-    const vv = Vec3.init(0, -viewportHeight, 0);
-    const du = vu.divScalar(@floatFromInt(imgWidth));
-    const dv = vv.divScalar(@floatFromInt(imgHeight));
-
-    // Calculate location of the upper left pixel
-    const viewUpperLeft = cameraCenter // (0, 0, 0)
-        .sub(Vec3.init(0, 0, focalLen)) // (0, 0, -1)
-        .sub(vu.divScalar(2)) // (-1.777.., 0, -1)
-        .sub(vv.divScalar(2)); // (-1.777..., -2.0, -1)
-    const pixel0 = viewUpperLeft.add(du.add(dv).mulScalar(0.5)); // Inset by half a pixel
-
-    // Setup Image/PPM
-    var ppm = PPM.init(allocator, imgWidth, imgHeight);
-    defer ppm.deinit();
-
-    // Write the pixels
-    for (0..ppm.height) |j| {
-        std.log.info("\rScanlines remaining: {d} ", .{ppm.height - j});
-        for (0..ppm.width) |i| {
-            const pixelCenter = pixel0
-                .add(du.mulScalar(@floatFromInt(i)))
-                .add(dv.mulScalar(@floatFromInt(j)));
-            const rayDir = pixelCenter.sub(cameraCenter); // We don't really need to subtract (0, 0, 0) from the pixel center
-            const ray = Ray.init(cameraCenter, rayDir);
-            ppm.pixels[i + j * ppm.width] = rayColor(ray, world);
-        }
-    }
-    std.log.info("\rDone.\n", .{});
-
-    // Save the file
-    try ppm.saveBinary("images/chapter6.ppm");
+    // Render
+    try camera.render(world);
 }
 
 test "main" {

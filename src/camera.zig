@@ -65,8 +65,9 @@ const Viewport = struct {
 };
 
 const defaultCameraCenter = Point3.init(0, 0, 0);
+const defaultFocalLength = 1.0;
 pub const Camera = struct {
-    focalLength: f64 = 1.0,
+    focalLength: f64 = defaultFocalLength,
     image: Image,
     viewport: Viewport,
     center: Point3 = defaultCameraCenter,
@@ -78,7 +79,7 @@ pub const Camera = struct {
     /// aspect ratio in order to setup a Camera. Do not set fields manually unless you
     /// are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio.
-    pub fn init(focalLength: f64, width: usize, aspectRatio: f64) Camera {
+    pub fn init(width: usize, aspectRatio: f64) Camera {
         const img = Image.init(width, aspectRatio);
         const vp = Viewport.init(img);
         const vu = Vec3.init(vp.width, 0, 0);
@@ -86,11 +87,11 @@ pub const Camera = struct {
         const du = vu.divScalar(@floatFromInt(img.width));
         const dv = vv.divScalar(@floatFromInt(img.height));
 
-        const viewportUpperLeft = defaultCameraCenter.sub(Vec3.init(0, 0, focalLength)).sub(vu.divScalar(2)).sub(vv.divScalar(2));
+        const viewportUpperLeft = defaultCameraCenter.sub(Vec3.init(0, 0, defaultFocalLength)).sub(vu.divScalar(2)).sub(vv.divScalar(2));
         const pixel0 = viewportUpperLeft.add(du.add(dv).mulScalar(0.5));
 
         return .{
-            .focalLength = focalLength,
+            .focalLength = defaultFocalLength,
             .image = img,
             .viewport = vp,
             .center = defaultCameraCenter,
@@ -206,7 +207,7 @@ test "Camera" {
         .dv = cameraVv.divScalar(400),
         .pixel0 = cameraUpperLeft.add(cameraVu.divScalar(800).add(cameraVv.divScalar(400)).mulScalar(0.5)),
     };
-    const init = Camera.init(1.0, 400, (16.0 / 9.0));
+    const init = Camera.init(400, (16.0 / 9.0));
 
     try std.testing.expectEqual(2.0, camera.focalLength);
     try std.testing.expectEqual(800, camera.image.width);
@@ -236,7 +237,7 @@ test "Camera render()" {
 
     // Figure out aspect ratio, image width, and height
     const aspectRatio = 16.0 / 9.0;
-    const camera = Camera.init(1.0, 400, aspectRatio);
+    const camera = Camera.init(400, aspectRatio);
 
     // World
     var world = HittableList.init(std.testing.allocator);
