@@ -36,6 +36,15 @@ pub const Interval = struct {
     pub fn surrounds(self: Interval, x: f64) bool {
         return self.min < x and x < self.max;
     }
+
+    pub fn clamp(self: Interval, x: f64) f64 {
+        return if (x < self.min)
+            self.min
+        else if (x > self.max)
+            self.max
+        else
+            x;
+    }
 };
 
 test "empty()" {
@@ -118,4 +127,28 @@ test "surrounds()" {
     try std.testing.expect(!empty.contains(0));
     try std.testing.expect(!uni.surrounds(negInf));
     try std.testing.expect(!uni.surrounds(posInf));
+}
+
+test "clamp()" {
+    const int = Interval.init(0, 2);
+    const empty = Interval.empty();
+    const uni = Interval.universe();
+
+    try std.testing.expectEqual(0, int.clamp(0));
+    try std.testing.expectEqual(0, int.clamp(-1));
+    try std.testing.expectEqual(1, int.clamp(1));
+    try std.testing.expectEqual(2, int.clamp(2));
+    try std.testing.expectEqual(2, int.clamp(3));
+
+    try std.testing.expectEqual(posInf, empty.clamp(0));
+    try std.testing.expectEqual(posInf, empty.clamp(-1));
+    try std.testing.expectEqual(posInf, empty.clamp(1));
+    try std.testing.expectEqual(negInf, empty.clamp(posInf));
+    try std.testing.expectEqual(posInf, empty.clamp(negInf));
+
+    try std.testing.expectEqual(0, uni.clamp(0));
+    try std.testing.expectEqual(-1, uni.clamp(-1));
+    try std.testing.expectEqual(1, uni.clamp(1));
+    try std.testing.expectEqual(negInf, uni.clamp(negInf));
+    try std.testing.expectEqual(posInf, uni.clamp(posInf));
 }
