@@ -54,10 +54,10 @@ pub fn main() !void {
 test "main" {
     try main();
 
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter6.ppm", 5e5);
+    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter7.ppm", 5e5);
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter6.ppm", 5e5);
+    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter7.ppm", 5e5);
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);
