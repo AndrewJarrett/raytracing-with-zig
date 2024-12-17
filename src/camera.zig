@@ -1,4 +1,5 @@
 const std = @import("std");
+const util = @import("util.zig");
 
 const Point3 = @import("vec.zig").Point3;
 const Vec3 = @import("vec.zig").Vec3;
@@ -66,6 +67,8 @@ const Viewport = struct {
 
 const defaultCameraCenter = Point3.init(0, 0, 0);
 const defaultFocalLength = 1.0;
+const defaultSamplesPerPixel = 100;
+const defaultPixelSamplesScale = 1.0 / @as(f64, @floatFromInt(defaultSamplesPerPixel));
 pub const Camera = struct {
     focalLength: f64 = defaultFocalLength,
     image: Image,
@@ -74,12 +77,15 @@ pub const Camera = struct {
     du: Vec3,
     dv: Vec3,
     pixel0: Point3,
+    samplesPerPixel: usize = defaultSamplesPerPixel,
+    pixelSamplesScale: f64 = defaultPixelSamplesScale,
+    seed: ?u64 = null,
 
     /// Provide a focal length for the camera, the width of the image, and an
     /// aspect ratio in order to setup a Camera. Do not set fields manually unless you
     /// are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio.
-    pub fn init(width: usize, aspectRatio: f64) Camera {
+    pub fn init(width: usize, aspectRatio: f64, seed: ?u64) Camera {
         const img = Image.init(width, aspectRatio);
         const vp = Viewport.init(img);
         const vu = Vec3.init(vp.width, 0, 0);
@@ -98,6 +104,9 @@ pub const Camera = struct {
             .du = du,
             .dv = dv,
             .pixel0 = pixel0,
+            .samplesPerPixel = defaultSamplesPerPixel,
+            .pixelSamplesScale = defaultPixelSamplesScale,
+            .seed = seed,
         };
     }
 
@@ -113,18 +122,21 @@ pub const Camera = struct {
         for (0..ppm.height) |j| {
             std.log.info("\rScanlines remaining: {d} ", .{ppm.height - j});
             for (0..ppm.width) |i| {
-                const pixelCenter = self.pixel0
-                    .add(self.du.mulScalar(@floatFromInt(i)))
-                    .add(self.dv.mulScalar(@floatFromInt(j)));
-                const rayDir = pixelCenter.sub(self.center); // We don't really need to subtract (0, 0, 0) from the pixel center
-                const ray = Ray.init(self.center, rayDir);
-                ppm.pixels[i + j * ppm.width] = Camera.rayColor(ray, world);
+                var pixelColor = Color.init(0, 0, 0);
+                // Anti-aliasing sampling
+                for (0..self.samplesPerPixel) |_| {
+                    const ray = self.getRay(i, j);
+                    const color = Camera.rayColor(ray, world);
+                    pixelColor.pixel = pixelColor.pixel.add(color.pixel);
+                }
+                const avgColor = Color.fromVec(pixelColor.pixel.mulScalar(self.pixelSamplesScale));
+                ppm.pixels[i + j * ppm.width] = avgColor;
             }
         }
         std.log.info("\rDone.\n", .{});
 
         // Save the file
-        try ppm.saveBinary("images/chapter6.ppm");
+        try ppm.saveBinary("images/chapter7.ppm");
     }
 
     fn rayColor(ray: Ray, world: HittableList) Color {
@@ -132,7 +144,7 @@ pub const Camera = struct {
         const hitRecord = world.hit(ray, Interval.init(0, inf));
         if (hitRecord) |rec| {
             const n: Vec3 = rec.normal.add(Color3.init(1, 1, 1)).mulScalar(0.5);
-            return Color.init(n.x(), n.y(), n.z());
+            return Color.fromVec(n);
         }
 
         const unitDir = ray.dir.unit(); // Normalize between -1 and 1
@@ -140,7 +152,27 @@ pub const Camera = struct {
         // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes, gradient changes from blue to white
         const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
             .add(Color.init(0.5, 0.7, 1.0).pixel.mulScalar(a));
-        return Color.init(vec.x(), vec.y(), vec.z());
+        return Color.fromVec(vec);
+    }
+
+    /// Gets a Camera Ray that originates from the origin point and is directed
+    /// towards a randomized sample point around the pixel location (i, j)
+    fn getRay(self: Camera, i: usize, j: usize) Ray {
+        const randomOffset = self.sampleSquare();
+        const pixelSample = self.pixel0
+            .add(self.du.mulScalar(@as(f64, @floatFromInt(i)) + randomOffset.x()))
+            .add(self.dv.mulScalar(@as(f64, @floatFromInt(j)) + randomOffset.y()));
+
+        return Ray.init(self.center, pixelSample.sub(self.center));
+    }
+
+    /// Return a vector to a random point in the [-.5,-.5] - [+.5,+.5] unit square
+    fn sampleSquare(self: Camera) Vec3 {
+        return Vec3.init(
+            util.randomDouble(self.seed) - 0.5,
+            util.randomDouble(self.seed) - 0.5,
+            0,
+        );
     }
 };
 
@@ -206,8 +238,10 @@ test "Camera" {
         .du = cameraVu.divScalar(800),
         .dv = cameraVv.divScalar(400),
         .pixel0 = cameraUpperLeft.add(cameraVu.divScalar(800).add(cameraVv.divScalar(400)).mulScalar(0.5)),
+        .samplesPerPixel = defaultSamplesPerPixel,
+        .pixelSamplesScale = defaultPixelSamplesScale,
     };
-    const init = Camera.init(400, (16.0 / 9.0));
+    const init = Camera.init(400, (16.0 / 9.0), 0xdeadbeef);
 
     try std.testing.expectEqual(2.0, camera.focalLength);
     try std.testing.expectEqual(800, camera.image.width);
@@ -219,6 +253,9 @@ test "Camera" {
     try std.testing.expectEqual(cameraVu.divScalar(800), camera.du);
     try std.testing.expectEqual(cameraVv.divScalar(400), camera.dv);
     try std.testing.expectEqual(Vec3.init(-1.9975, 0.9975, -2), camera.pixel0);
+    try std.testing.expectEqual(defaultSamplesPerPixel, camera.samplesPerPixel);
+    try std.testing.expectEqual(defaultPixelSamplesScale, camera.pixelSamplesScale);
+    try std.testing.expectEqual(null, camera.seed);
 
     try std.testing.expectEqual(1.0, init.focalLength);
     try std.testing.expectEqual(400, init.image.width);
@@ -230,14 +267,17 @@ test "Camera" {
     try std.testing.expectEqual(Vec3.init(0.008888888888888889, 0, 0), init.du);
     try std.testing.expectEqual(Vec3.init(0, -0.008888888888888889, 0), init.dv);
     try std.testing.expectEqual(Vec3.init(-1.7733333333333332, 0.9955555555555555, -1), init.pixel0);
+    try std.testing.expectEqual(defaultSamplesPerPixel, init.samplesPerPixel);
+    try std.testing.expectEqual(defaultPixelSamplesScale, init.pixelSamplesScale);
+    try std.testing.expectEqual(0xdeadbeef, init.seed);
 }
 
-test "Camera render()" {
+test "Camera.render()" {
     const Hittable = @import("hittable.zig").Hittable;
 
-    // Figure out aspect ratio, image width, and height
+    // Figure out aspect ratio, image width, and set a deterministic seed
     const aspectRatio = 16.0 / 9.0;
-    const camera = Camera.init(400, aspectRatio);
+    var camera = Camera.init(400, aspectRatio, 0xdeadbeef);
 
     // World
     var world = HittableList.init(std.testing.allocator);
@@ -248,11 +288,22 @@ test "Camera render()" {
     // Render and save the file
     try camera.render(world);
 
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter6.ppm", 5e5);
+    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter7.ppm", 5e5);
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter6.ppm", 5e5);
+    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter7.ppm", 5e5);
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);
+}
+
+test "Camera.sampleSquare()" {
+    const tests = 1e6;
+    const camera = Camera.init(400, 1.0, null);
+    for (0..tests) |_| {
+        const sample = camera.sampleSquare();
+        try std.testing.expect(-0.5 <= sample.x() and sample.x() <= 0.5);
+        try std.testing.expect(-0.5 <= sample.y() and sample.y() <= 0.5);
+        try std.testing.expectEqual(0, sample.z());
+    }
 }

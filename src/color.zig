@@ -1,5 +1,6 @@
 const std = @import("std");
 const Vec3 = @import("vec.zig").Vec3;
+const Interval = @import("interval.zig").Interval;
 
 pub const Color3 = Vec3;
 
@@ -23,9 +24,7 @@ pub const Color = packed struct {
     pixel: Color3,
 
     pub fn init(r: f64, g: f64, b: f64) Color {
-        return .{
-            .pixel = Color3.init(r, g, b),
-        };
+        return .{ .pixel = Color3.init(r, g, b) };
     }
 
     pub fn fromValue(value: u24) Color {
@@ -41,6 +40,14 @@ pub const Color = packed struct {
         return (@as(u24, rgb.r) << 16) | (@as(u24, rgb.g) << 8) | rgb.b;
     }
 
+    pub fn fromVec(vec: Vec3) Color {
+        return .{ .pixel = vec };
+    }
+
+    pub fn toVec(self: Color) Vec3 {
+        return self.pixel;
+    }
+
     pub fn fromRgb(rgb: RGB) Color {
         return .{
             .pixel = Color3.init(
@@ -52,10 +59,11 @@ pub const Color = packed struct {
     }
 
     pub fn toRgb(self: Color) RGB {
+        const interval = Interval.init(0.000, 0.999);
         return .{
-            .r = @intFromFloat(255.999 * self.pixel.x()),
-            .g = @intFromFloat(255.999 * self.pixel.y()),
-            .b = @intFromFloat(255.999 * self.pixel.z()),
+            .r = @intFromFloat(256 * interval.clamp(self.pixel.x())),
+            .g = @intFromFloat(256 * interval.clamp(self.pixel.y())),
+            .b = @intFromFloat(256 * interval.clamp(self.pixel.z())),
         };
     }
 
@@ -117,6 +125,18 @@ test "toValue()" {
     try std.testing.expectEqual(expected, actual);
 }
 
+test "fromVec()" {
+    const expected = Color.init(3, 2, 1);
+    const actual = Color.fromVec(Color3.init(3, 2, 1));
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "toVec()" {
+    const expected = Vec3.init(3, 2, 1);
+    const actual = Color.fromVec(Color3.init(3, 2, 1)).toVec();
+    try std.testing.expectEqual(expected, actual);
+}
+
 test "fromRgb()" {
     const c = Color.fromRgb(.{ .r = 255, .g = 0, .b = 255 });
 
@@ -129,13 +149,13 @@ test "toRgb()" {
     const rgb = Color.init(0.0, 0.5, 0.75).toRgb();
 
     try std.testing.expectEqual(0, rgb.r);
-    try std.testing.expectEqual(127, rgb.g);
-    try std.testing.expectEqual(191, rgb.b);
+    try std.testing.expectEqual(128, rgb.g);
+    try std.testing.expectEqual(192, rgb.b);
 }
 
 test "format()" {
     const c = Color.init(0.0, 0.5, 0.75);
-    const expected = "0 127 191";
+    const expected = "0 128 192";
 
     var buffer: [20]u8 = undefined;
     const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{c});
