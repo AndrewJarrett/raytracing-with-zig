@@ -7,12 +7,18 @@ pub inline fn degToRad(degrees: f64) f64 {
     return degrees * std.math.pi / 180.0;
 }
 
-/// Return a double/f64 in the range of [0,1)
-pub inline fn randomDouble() f64 {
+/// Return a double/f64 in the range of [0,1).
+/// Can use a deterministic seed if provided, otherwise,
+/// will use the OS to get a random seed.
+pub inline fn randomDouble(seed: ?u64) f64 {
     var prng = std.rand.DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-        break :blk seed;
+        if (seed) |s| {
+            break :blk s;
+        } else {
+            var newSeed: u64 = undefined;
+            std.posix.getrandom(std.mem.asBytes(&newSeed)) catch unreachable;
+            break :blk newSeed;
+        }
     });
     const rand = prng.random();
 
@@ -23,7 +29,7 @@ pub inline fn randomDouble() f64 {
 
 /// Return a randomg double/f64 in a specfic range of [min,max)
 pub inline fn randomDoubleRange(min: f64, max: f64) f64 {
-    return min + (max - min) * randomDouble();
+    return min + (max - min) * randomDouble(null);
 }
 
 test "degToRad()" {
@@ -38,7 +44,7 @@ test "degToRad()" {
 test "randomDouble()" {
     const tests = 1e6;
     for (0..tests) |_| {
-        const result = randomDouble();
+        const result = randomDouble(null);
         try std.testing.expect(0.0 <= result and result < 1.0);
     }
 }

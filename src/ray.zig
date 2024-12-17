@@ -13,6 +13,13 @@ pub const Ray = packed struct {
     pub fn at(self: Ray, t: f64) Vec3 {
         return self.orig.add(self.dir.mulScalar(t));
     }
+
+    pub fn format(self: Ray, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+
+        try writer.print("[{s}] -> [{s}]", .{ self.orig, self.dir });
+    }
 };
 
 test "init()" {
@@ -39,4 +46,16 @@ test "at()" {
     const expected = Vec3.init(1, 2, 3);
     const actual = ray.at(t);
     try std.testing.expectEqual(expected, actual);
+}
+
+test "format()" {
+    const orig = Point3.init(0, 0, 0);
+    const dir = Vec3.init(1, 2, 3);
+    const ray = Ray.init(orig, dir);
+
+    const expected = "[0 0 0] -> [1 2 3]";
+    var buffer: [25]u8 = undefined;
+    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{ray});
+
+    try std.testing.expectEqualStrings(expected, actual);
 }

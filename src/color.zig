@@ -24,9 +24,7 @@ pub const Color = packed struct {
     pixel: Color3,
 
     pub fn init(r: f64, g: f64, b: f64) Color {
-        return .{
-            .pixel = Color3.init(r, g, b),
-        };
+        return .{ .pixel = Color3.init(r, g, b) };
     }
 
     pub fn fromValue(value: u24) Color {
@@ -40,6 +38,14 @@ pub const Color = packed struct {
     pub fn toValue(self: Color) u24 {
         const rgb = self.toRgb();
         return (@as(u24, rgb.r) << 16) | (@as(u24, rgb.g) << 8) | rgb.b;
+    }
+
+    pub fn fromVec(vec: Vec3) Color {
+        return .{ .pixel = vec };
+    }
+
+    pub fn toVec(self: Color) Vec3 {
+        return self.pixel;
     }
 
     pub fn fromRgb(rgb: RGB) Color {
@@ -116,6 +122,18 @@ test "fromValue()" {
 test "toValue()" {
     const expected: u24 = ((255 << 16) | (0 << 8) | 255);
     const actual = Color.init(1.0, 0.0, 1.0).toValue();
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "fromVec()" {
+    const expected = Color.init(3, 2, 1);
+    const actual = Color.fromVec(Color3.init(3, 2, 1));
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "toVec()" {
+    const expected = Vec3.init(3, 2, 1);
+    const actual = Color.fromVec(Color3.init(3, 2, 1)).toVec();
     try std.testing.expectEqual(expected, actual);
 }
 
