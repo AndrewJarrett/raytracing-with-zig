@@ -10,6 +10,7 @@ const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
 const PPM = @import("ppm.zig").PPM;
 
+pub const chapter = "chapter9";
 const inf = std.math.inf(f64);
 
 const Image = struct {
@@ -136,7 +137,7 @@ pub const Camera = struct {
         std.log.info("\rDone.\n", .{});
 
         // Save the file
-        try ppm.saveBinary("images/chapter7.ppm");
+        try ppm.saveBinary("images/" ++ chapter ++ ".ppm");
     }
 
     fn rayColor(ray: Ray, world: HittableList) Color {
@@ -288,10 +289,10 @@ test "Camera.render()" {
     // Render and save the file
     try camera.render(world);
 
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/chapter7.ppm", 5e5);
+    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/" ++ chapter ++ ".ppm", 5e5);
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter7.ppm", 5e5);
+    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/" ++ chapter ++ ".ppm", 5e5);
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);

@@ -11,6 +11,7 @@ const Hittable = @import("hittable.zig").Hittable;
 const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
 const Camera = @import("camera.zig").Camera;
+const chapter = @import("camera.zig").chapter;
 
 const Allocator = std.mem.Allocator;
 
@@ -58,7 +59,7 @@ pub fn main() !void {
 test "main" {
     try main();
 
-    const file = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/chapter7.ppm", 5e5);
+    const file = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/" ++ chapter ++ ".ppm", 5e5);
     defer std.testing.allocator.free(file);
 
     try std.testing.expect(file.len > 0);
