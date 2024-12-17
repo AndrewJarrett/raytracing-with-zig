@@ -17,22 +17,6 @@ const Allocator = std.mem.Allocator;
 
 const inf = std.math.inf(f64);
 
-fn rayColor(ray: Ray, world: HittableList) Color {
-    // Find the point where we hit the sphere
-    const hitRecord = world.hit(ray, Interval.init(0, inf));
-    if (hitRecord) |rec| {
-        const n: Vec3 = rec.normal.add(Color3.init(1, 1, 1)).mulScalar(0.5);
-        return Color.init(n.x(), n.y(), n.z());
-    }
-
-    const unitDir = ray.dir.unit(); // Normalize between -1 and 1
-    const a = 0.5 * (unitDir.y() + 1.0); // Shift "up" by 1 and then divide in half to make it between 0 - 1
-    // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes, gradient changes from blue to white
-    const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
-        .add(Color.init(0.5, 0.7, 1.0).pixel.mulScalar(a));
-    return Color.init(vec.x(), vec.y(), vec.z());
-}
-
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
