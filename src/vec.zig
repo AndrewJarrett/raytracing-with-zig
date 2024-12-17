@@ -1,4 +1,5 @@
 const std = @import("std");
+const util = @import("util.zig");
 pub const Point3 = Vec3;
 
 pub const Vec3 = packed struct {
@@ -66,6 +67,41 @@ pub const Vec3 = packed struct {
 
     pub fn lenSquared(self: Vec3) f64 {
         return @reduce(.Add, (self.v * self.v));
+    }
+
+    pub fn random(seed: ?u64) Vec3 {
+        return Vec3.init(
+            util.randomDouble(seed),
+            util.randomDouble(seed),
+            util.randomDouble(seed),
+        );
+    }
+
+    pub fn randomRange(min: f64, max: f64, seed: ?u64) Vec3 {
+        return Vec3.init(
+            util.randomDoubleRange(min, max, seed),
+            util.randomDoubleRange(min, max, seed),
+            util.randomDoubleRange(min, max, seed),
+        );
+    }
+
+    pub fn randomUnitVec(seed: ?u64) Vec3 {
+        while (true) {
+            const v = Vec3.randomRange(-1, 1, seed);
+            const lenSq = v.lenSquared();
+            if (1e-160 < lenSq and lenSq <= 1) {
+                return v.divScalar(@sqrt(lenSq));
+            }
+        }
+    }
+
+    pub fn randomOnHemisphere(normal: Vec3, seed: ?u64) Vec3 {
+        var onUnitSphere = Vec3.randomUnitVec(seed);
+        if (onUnitSphere.dot(normal) > 0.0) {
+            return onUnitSphere;
+        } else {
+            return onUnitSphere.neg();
+        }
     }
 
     pub fn dot(self: Vec3, other: Vec3) f64 {
@@ -189,6 +225,47 @@ test "len()" {
 test "lenSquared()" {
     const lenSquared = Vec3.init(1.0, 0.0, 2.0).lenSquared();
     try std.testing.expectEqual(5.0, lenSquared);
+}
+
+test "random()" {
+    const tests = 1e3;
+    for (0..tests) |_| {
+        const vec = Vec3.random(null);
+        try std.testing.expect(0 <= vec.x() and vec.x() < 1.0);
+        try std.testing.expect(0 <= vec.y() and vec.y() < 1.0);
+        try std.testing.expect(0 <= vec.z() and vec.z() < 1.0);
+    }
+
+    const expected = Vec3.random(0xcafef00d);
+    const actual = Vec3.random(0xcafef00d);
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "randomRange()" {
+    const tests = 1e3;
+    for (0..tests) |_| {
+        const vec = Vec3.randomRange(1, 3, null);
+        try std.testing.expect(1 <= vec.x() and vec.x() < 3);
+        try std.testing.expect(1 <= vec.y() and vec.y() < 3);
+        try std.testing.expect(1 <= vec.z() and vec.z() < 3);
+    }
+
+    const expected = Vec3.randomRange(-1, 0, 0xcafef00d);
+    const actual = Vec3.randomRange(-1, 0, 0xcafef00d);
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "randomUnitVec()" {
+    const expected = Vec3.randomUnitVec(0xcafef00d);
+    const actual = Vec3.randomUnitVec(0xcafef00d);
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "randomOnHemisphere()" {
+    const normal = Vec3.init(1, 1, -1);
+    const expected = Vec3.randomOnHemisphere(normal, 0xcafef00d);
+    const actual = Vec3.randomOnHemisphere(normal, 0xcafef00d);
+    try std.testing.expectEqual(expected, actual);
 }
 
 test "dot()" {
