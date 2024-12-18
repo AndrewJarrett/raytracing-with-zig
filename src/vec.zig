@@ -86,12 +86,19 @@ pub const Vec3 = packed struct {
     }
 
     pub fn randomUnitVec(seed: ?u64) Vec3 {
+        //var newSeed = seed;
         while (true) {
-            const v = Vec3.randomRange(-1, 1, seed);
-            const lenSq = v.lenSquared();
+            const p = Vec3.randomRange(-1, 1, seed);
+            //const p = Vec3.randomRange(-1, 1, newSeed);
+            const lenSq = p.lenSquared();
+            //std.debug.print("randomUnitVec - p: {s}; lenSq: {d}\n", .{ p, lenSq });
             if (1e-160 < lenSq and lenSq <= 1) {
-                return v.divScalar(@sqrt(lenSq));
+                return p.divScalar(@sqrt(lenSq));
             }
+
+            // If we provided a seed, make sure we don't continually try to get
+            // a random vector that is the same every time
+            //if (newSeed) |s| newSeed = s + 1;
         }
     }
 

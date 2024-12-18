@@ -70,6 +70,7 @@ const defaultCameraCenter = Point3.init(0, 0, 0);
 const defaultFocalLength = 1.0;
 const defaultSamplesPerPixel = 100;
 const defaultPixelSamplesScale = 1.0 / @as(f64, @floatFromInt(defaultSamplesPerPixel));
+const defaultBounceMax = 50;
 pub const Camera = struct {
     focalLength: f64 = defaultFocalLength,
     image: Image,
@@ -80,6 +81,7 @@ pub const Camera = struct {
     pixel0: Point3,
     samplesPerPixel: usize = defaultSamplesPerPixel,
     pixelSamplesScale: f64 = defaultPixelSamplesScale,
+    bounceMax: usize = defaultBounceMax,
     seed: ?u64 = null,
 
     /// Provide a focal length for the camera, the width of the image, and an
@@ -107,6 +109,7 @@ pub const Camera = struct {
             .pixel0 = pixel0,
             .samplesPerPixel = defaultSamplesPerPixel,
             .pixelSamplesScale = defaultPixelSamplesScale,
+            .bounceMax = defaultBounceMax,
             .seed = seed,
         };
     }
@@ -127,7 +130,7 @@ pub const Camera = struct {
                 // Anti-aliasing sampling
                 for (0..self.samplesPerPixel) |_| {
                     const ray = self.getRay(i, j);
-                    const color = Camera.rayColor(ray, world);
+                    const color = self.rayColor(ray, 0, world);
                     pixelColor.pixel = pixelColor.pixel.add(color.pixel);
                 }
                 const avgColor = Color.fromVec(pixelColor.pixel.mulScalar(self.pixelSamplesScale));
@@ -140,21 +143,71 @@ pub const Camera = struct {
         try ppm.saveBinary("images/" ++ chapter ++ ".ppm");
     }
 
-    fn rayColor(ray: Ray, world: HittableList) Color {
-        // Find the point where we hit the sphere
-        const hitRecord = world.hit(ray, Interval.init(0, inf));
-        if (hitRecord) |rec| {
-            const n: Vec3 = rec.normal.add(Color3.init(1, 1, 1)).mulScalar(0.5);
-            return Color.fromVec(n);
+    fn rayColor(self: Camera, ray: Ray, depth: usize, world: HittableList) Color {
+        if (depth >= self.bounceMax) return Color.init(0, 0, 0);
+
+        if (world.hit(ray, Interval.init(0, inf))) |rec| {
+            // Update ray to randomly bounce in a new direction
+            const newRay = Ray.init(
+                rec.point,
+                rec.normal.randomOnHemisphere(self.seed),
+            );
+            return Color.fromVec(self.rayColor(newRay, depth + 1, world).pixel.mulScalar(0.5));
         }
 
-        const unitDir = ray.dir.unit(); // Normalize between -1 and 1
-        const a = 0.5 * (unitDir.y() + 1.0); // Shift "up" by 1 and then divide in half to make it between 0 - 1
-        // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes, gradient changes from blue to white
+        // Normalize between -1 and 1
+        const unitDir = ray.dir.unit();
+
+        // Shift "up" by 1 and then divide in half to make it between 0 - 1
+        const a = 0.5 * (unitDir.y() + 1.0);
+
+        // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes,
+        // gradient changes from blue to white
         const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
             .add(Color.init(0.5, 0.7, 1.0).pixel.mulScalar(a));
+
         return Color.fromVec(vec);
     }
+
+    //fn rayColor(self: Camera, ray: Ray, world: HittableList) Color {
+    //    // Find the point where we hit the sphere and randomly bounce the ray
+    //    // until we don't hit anything else
+    //    var newRay = ray;
+    //    var numHits: usize = 0;
+    //    while (world.hit(newRay, Interval.init(0, inf))) |rec| {
+    //        // Update ray to randomly bounce in a new direction
+    //        //std.debug.print("hit! numHits: {d}; newRay: {s};\n", .{ numHits, newRay });
+    //        newRay.orig = rec.point;
+    //        newRay.dir = rec.normal.randomOnHemisphere(self.seed);
+    //        //hitColor = Color.fromVec(Color3.init(1, 1, 1).mulScalar(0.5));
+    //        numHits += 1;
+    //        if (numHits >= self.bounceMax) return Color.init(0, 0, 0);
+    //    }
+
+    //    const modifier = if (numHits == 0)
+    //        1
+    //    else
+    //        0.5 * @as(f64, @floatFromInt(numHits));
+
+    //    //const hitRecord = world.hit(ray, Interval.init(0, inf));
+    //    //if (hitRecord) |rec| {
+    //    //    const n: Vec3 = rec.normal.add(Color3.init(1, 1, 1)).mulScalar(0.5);
+    //    //    return Color.fromVec(n);
+    //    //}
+
+    //    // Normalize between -1 and 1
+    //    const unitDir = ray.dir.unit();
+
+    //    // Shift "up" by 1 and then divide in half to make it between 0 - 1
+    //    const a = 0.5 * (unitDir.y() + 1.0);
+
+    //    // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes,
+    //    // gradient changes from blue to white
+    //    const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
+    //        .add(Color.init(0.5, 0.7, 1.0).pixel.mulScalar(a));
+
+    //    return Color.fromVec(vec.mulScalar(modifier));
+    //}
 
     /// Gets a Camera Ray that originates from the origin point and is directed
     /// towards a randomized sample point around the pixel location (i, j)
