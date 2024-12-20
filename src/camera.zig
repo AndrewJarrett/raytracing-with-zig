@@ -177,7 +177,7 @@ pub const Camera = struct {
             // Update ray to randomly bounce in a new direction
             const newRay = Ray.init(
                 rec.point,
-                rec.normal.randomOnHemisphere(self.prng),
+                rec.normal.add(Vec3.randomUnitVec(self.prng)),
             );
             return Color.fromVec(self.rayColor(newRay, depth + 1, world).pixel.mulScalar(0.5));
         }
