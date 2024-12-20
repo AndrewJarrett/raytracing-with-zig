@@ -30,7 +30,8 @@ pub fn main() !void {
     // Camera
     const imgWidth = 400;
     const aspectRatio = 16.0 / 9.0;
-    const camera = Camera.init(imgWidth, aspectRatio, null);
+    const camera = Camera.init(allocator, imgWidth, aspectRatio, null);
+    defer camera.deinit();
 
     // Render
     try camera.render(world);

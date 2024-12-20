@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const DefaultPrng = std.rand.DefaultPrng;
+
 const pi = std.math.pi;
 
 /// Convert degrees to radians as an f64
@@ -10,26 +12,13 @@ pub inline fn degToRad(degrees: f64) f64 {
 /// Return a double/f64 in the range of [0,1).
 /// Can use a deterministic seed if provided, otherwise,
 /// will use the OS to get a random seed.
-pub inline fn randomDouble(seed: ?u64) f64 {
-    var prng = std.rand.DefaultPrng.init(blk: {
-        if (seed) |s| {
-            break :blk s;
-        } else {
-            var newSeed: u64 = undefined;
-            std.posix.getrandom(std.mem.asBytes(&newSeed)) catch unreachable;
-            break :blk newSeed;
-        }
-    });
-    const rand = prng.random();
-
-    const max = std.math.maxInt(u64);
-    const intInRange = rand.intRangeLessThan(u64, 0, max);
-    return @as(f64, @floatFromInt(intInRange)) / @as(f64, @floatFromInt(max));
+pub inline fn randomDouble(prng: *DefaultPrng) f64 {
+    return prng.random().float(f64);
 }
 
 /// Return a randomg double/f64 in a specfic range of [min,max)
-pub inline fn randomDoubleRange(min: f64, max: f64, seed: ?u64) f64 {
-    return min + (max - min) * randomDouble(seed);
+pub inline fn randomDoubleRange(min: f64, max: f64, prng: *DefaultPrng) f64 {
+    return min + (max - min) * randomDouble(prng);
 }
 
 test "degToRad()" {
@@ -42,28 +31,56 @@ test "degToRad()" {
 }
 
 test "randomDouble()" {
+    var prng = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+
     const tests = 1e6;
     for (0..tests) |_| {
-        const result = randomDouble(null);
+        const result = randomDouble(&prng);
         try std.testing.expect(0.0 <= result and result < 1.0);
     }
 
-    const expected = randomDouble(0xcafef00d);
-    const actual = randomDouble(0xcafef00d);
+    // Make sure that getting a random number from the same seed will
+    // produce the same number (for the first generated number)
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+
+    const expected = randomDouble(&seededPrng);
+    const actual = randomDouble(&newSeededPrng);
     try std.testing.expectEqual(expected, actual);
+
+    // Expect that the next number is not the same as the prior
+    try std.testing.expect(expected != randomDouble(&seededPrng));
 }
 
 test "randomDoubleRange()" {
+    var prng = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+
     const tests = 1e6;
     const min = 1.0;
     const max = 10.0;
     for (0..tests) |t| {
         const i = @as(f64, @floatFromInt(t));
-        const result = randomDoubleRange(i + min, i + max, null);
+        const result = randomDoubleRange(i + min, i + max, &prng);
         try std.testing.expect(i + min <= result and result < i + max);
     }
 
-    const expected = randomDoubleRange(-1, 0, 0xcafef00d);
-    const actual = randomDoubleRange(-1, 0, 0xcafef00d);
+    // Ensure that two different Random structs seeded with the same seed will
+    // generate the same number when given the same seed.
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = randomDoubleRange(-1, 0, &seededPrng);
+    const actual = randomDoubleRange(-1, 0, &newSeededPrng);
     try std.testing.expectEqual(expected, actual);
+
+    // Ensure that the next random number is different from the prior call of
+    // the random function when provided a Random struct that is seeded
+    try std.testing.expect(expected != randomDoubleRange(-1, 0, &seededPrng));
 }

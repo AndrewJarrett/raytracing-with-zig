@@ -1,5 +1,7 @@
 const std = @import("std");
 const util = @import("util.zig");
+
+const DefaultPrng = std.rand.DefaultPrng;
 pub const Point3 = Vec3;
 
 pub const Vec3 = packed struct {
@@ -69,41 +71,35 @@ pub const Vec3 = packed struct {
         return @reduce(.Add, (self.v * self.v));
     }
 
-    pub fn random(seed: ?u64) Vec3 {
+    pub fn random(prng: *DefaultPrng) Vec3 {
         return Vec3.init(
-            util.randomDouble(seed),
-            util.randomDouble(seed),
-            util.randomDouble(seed),
+            util.randomDouble(prng),
+            util.randomDouble(prng),
+            util.randomDouble(prng),
         );
     }
 
-    pub fn randomRange(min: f64, max: f64, seed: ?u64) Vec3 {
+    pub fn randomRange(min: f64, max: f64, prng: *DefaultPrng) Vec3 {
         return Vec3.init(
-            util.randomDoubleRange(min, max, seed),
-            util.randomDoubleRange(min, max, seed),
-            util.randomDoubleRange(min, max, seed),
+            util.randomDoubleRange(min, max, prng),
+            util.randomDoubleRange(min, max, prng),
+            util.randomDoubleRange(min, max, prng),
         );
     }
 
-    pub fn randomUnitVec(seed: ?u64) Vec3 {
-        //var newSeed = seed;
+    pub fn randomUnitVec(prng: *DefaultPrng) Vec3 {
         while (true) {
-            const p = Vec3.randomRange(-1, 1, seed);
-            //const p = Vec3.randomRange(-1, 1, newSeed);
+            const p = Vec3.randomRange(-1, 1, prng);
             const lenSq = p.lenSquared();
-            //std.debug.print("randomUnitVec - p: {s}; lenSq: {d}\n", .{ p, lenSq });
+
             if (1e-160 < lenSq and lenSq <= 1) {
                 return p.divScalar(@sqrt(lenSq));
             }
-
-            // If we provided a seed, make sure we don't continually try to get
-            // a random vector that is the same every time
-            //if (newSeed) |s| newSeed = s + 1;
         }
     }
 
-    pub fn randomOnHemisphere(normal: Vec3, seed: ?u64) Vec3 {
-        var onUnitSphere = Vec3.randomUnitVec(seed);
+    pub fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
+        var onUnitSphere = Vec3.randomUnitVec(prng);
         if (onUnitSphere.dot(normal) > 0.0) {
             return onUnitSphere;
         } else {
@@ -235,43 +231,70 @@ test "lenSquared()" {
 }
 
 test "random()" {
+    var prng = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+
     const tests = 1e3;
     for (0..tests) |_| {
-        const vec = Vec3.random(null);
+        const vec = Vec3.random(&prng);
         try std.testing.expect(0 <= vec.x() and vec.x() < 1.0);
         try std.testing.expect(0 <= vec.y() and vec.y() < 1.0);
         try std.testing.expect(0 <= vec.z() and vec.z() < 1.0);
     }
 
-    const expected = Vec3.random(0xcafef00d);
-    const actual = Vec3.random(0xcafef00d);
+    // Ensure that two Random structs return the same output when given the
+    // same seed
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.random(&seededPrng);
+    const actual = Vec3.random(&newSeededPrng);
     try std.testing.expectEqual(expected, actual);
 }
 
 test "randomRange()" {
+    var prng = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+
     const tests = 1e3;
     for (0..tests) |_| {
-        const vec = Vec3.randomRange(1, 3, null);
+        const vec = Vec3.randomRange(1, 3, &prng);
         try std.testing.expect(1 <= vec.x() and vec.x() < 3);
         try std.testing.expect(1 <= vec.y() and vec.y() < 3);
         try std.testing.expect(1 <= vec.z() and vec.z() < 3);
     }
 
-    const expected = Vec3.randomRange(-1, 0, 0xcafef00d);
-    const actual = Vec3.randomRange(-1, 0, 0xcafef00d);
+    // Ensure that two Random structs return the same output when given the
+    // same seed
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.randomRange(-1, 0, &seededPrng);
+    const actual = Vec3.randomRange(-1, 0, &newSeededPrng);
     try std.testing.expectEqual(expected, actual);
 }
 
 test "randomUnitVec()" {
-    const expected = Vec3.randomUnitVec(0xcafef00d);
-    const actual = Vec3.randomUnitVec(0xcafef00d);
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.randomUnitVec(&seededPrng);
+    const actual = Vec3.randomUnitVec(&newSeededPrng);
     try std.testing.expectEqual(expected, actual);
 }
 
 test "randomOnHemisphere()" {
     const normal = Vec3.init(1, 1, -1);
-    const expected = Vec3.randomOnHemisphere(normal, 0xcafef00d);
-    const actual = Vec3.randomOnHemisphere(normal, 0xcafef00d);
+
+    // Ensure that two Random structs return the same output when given the
+    // same seed
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.randomOnHemisphere(normal, &seededPrng);
+    const actual = Vec3.randomOnHemisphere(normal, &newSeededPrng);
     try std.testing.expectEqual(expected, actual);
 }
 

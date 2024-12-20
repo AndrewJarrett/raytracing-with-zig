@@ -10,6 +10,8 @@ const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
 const PPM = @import("ppm.zig").PPM;
 
+const DefaultPrng = std.rand.DefaultPrng;
+const Allocator = std.mem.Allocator;
 pub const chapter = "chapter9";
 const inf = std.math.inf(f64);
 
@@ -72,6 +74,7 @@ const defaultSamplesPerPixel = 100;
 const defaultPixelSamplesScale = 1.0 / @as(f64, @floatFromInt(defaultSamplesPerPixel));
 const defaultBounceMax = 50;
 pub const Camera = struct {
+    alloc: Allocator,
     focalLength: f64 = defaultFocalLength,
     image: Image,
     viewport: Viewport,
@@ -83,12 +86,13 @@ pub const Camera = struct {
     pixelSamplesScale: f64 = defaultPixelSamplesScale,
     bounceMax: usize = defaultBounceMax,
     seed: ?u64 = null,
+    prng: *DefaultPrng,
 
     /// Provide a focal length for the camera, the width of the image, and an
     /// aspect ratio in order to setup a Camera. Do not set fields manually unless you
     /// are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio.
-    pub fn init(width: usize, aspectRatio: f64, seed: ?u64) Camera {
+    pub fn init(alloc: Allocator, width: usize, aspectRatio: f64, seed: ?u64) Camera {
         const img = Image.init(width, aspectRatio);
         const vp = Viewport.init(img);
         const vu = Vec3.init(vp.width, 0, 0);
@@ -99,7 +103,25 @@ pub const Camera = struct {
         const viewportUpperLeft = defaultCameraCenter.sub(Vec3.init(0, 0, defaultFocalLength)).sub(vu.divScalar(2)).sub(vv.divScalar(2));
         const pixel0 = viewportUpperLeft.add(du.add(dv).mulScalar(0.5));
 
+        // If there is a seed provided, then initialize the PRNG with that seed
+        // otherwise, we get a random seed. Make sure we allocate space on the
+        // heap because we will be passing the pointer around.
+        const prngPtr = alloc.create(DefaultPrng) catch unreachable;
+        const prng = prng: {
+            if (seed) |s| {
+                break :prng DefaultPrng.init(s);
+            } else {
+                break :prng DefaultPrng.init(blk: {
+                    var randSeed: u64 = undefined;
+                    std.posix.getrandom(std.mem.asBytes(&randSeed)) catch unreachable;
+                    break :blk randSeed;
+                });
+            }
+        };
+        prngPtr.* = prng;
+
         return .{
+            .alloc = alloc,
             .focalLength = defaultFocalLength,
             .image = img,
             .viewport = vp,
@@ -111,7 +133,12 @@ pub const Camera = struct {
             .pixelSamplesScale = defaultPixelSamplesScale,
             .bounceMax = defaultBounceMax,
             .seed = seed,
+            .prng = prngPtr,
         };
+    }
+
+    pub fn deinit(self: Camera) void {
+        self.alloc.destroy(self.prng);
     }
 
     pub fn render(self: Camera, world: HittableList) !void {
@@ -150,15 +177,13 @@ pub const Camera = struct {
             // Update ray to randomly bounce in a new direction
             const newRay = Ray.init(
                 rec.point,
-                rec.normal.randomOnHemisphere(self.seed),
+                rec.normal.randomOnHemisphere(self.prng),
             );
             return Color.fromVec(self.rayColor(newRay, depth + 1, world).pixel.mulScalar(0.5));
         }
 
-        // Normalize between -1 and 1
+        // Translate the y value to be between 0-1.
         const unitDir = ray.dir.unit();
-
-        // Shift "up" by 1 and then divide in half to make it between 0 - 1
         const a = 0.5 * (unitDir.y() + 1.0);
 
         // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes,
@@ -168,46 +193,6 @@ pub const Camera = struct {
 
         return Color.fromVec(vec);
     }
-
-    //fn rayColor(self: Camera, ray: Ray, world: HittableList) Color {
-    //    // Find the point where we hit the sphere and randomly bounce the ray
-    //    // until we don't hit anything else
-    //    var newRay = ray;
-    //    var numHits: usize = 0;
-    //    while (world.hit(newRay, Interval.init(0, inf))) |rec| {
-    //        // Update ray to randomly bounce in a new direction
-    //        //std.debug.print("hit! numHits: {d}; newRay: {s};\n", .{ numHits, newRay });
-    //        newRay.orig = rec.point;
-    //        newRay.dir = rec.normal.randomOnHemisphere(self.seed);
-    //        //hitColor = Color.fromVec(Color3.init(1, 1, 1).mulScalar(0.5));
-    //        numHits += 1;
-    //        if (numHits >= self.bounceMax) return Color.init(0, 0, 0);
-    //    }
-
-    //    const modifier = if (numHits == 0)
-    //        1
-    //    else
-    //        0.5 * @as(f64, @floatFromInt(numHits));
-
-    //    //const hitRecord = world.hit(ray, Interval.init(0, inf));
-    //    //if (hitRecord) |rec| {
-    //    //    const n: Vec3 = rec.normal.add(Color3.init(1, 1, 1)).mulScalar(0.5);
-    //    //    return Color.fromVec(n);
-    //    //}
-
-    //    // Normalize between -1 and 1
-    //    const unitDir = ray.dir.unit();
-
-    //    // Shift "up" by 1 and then divide in half to make it between 0 - 1
-    //    const a = 0.5 * (unitDir.y() + 1.0);
-
-    //    // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes,
-    //    // gradient changes from blue to white
-    //    const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
-    //        .add(Color.init(0.5, 0.7, 1.0).pixel.mulScalar(a));
-
-    //    return Color.fromVec(vec.mulScalar(modifier));
-    //}
 
     /// Gets a Camera Ray that originates from the origin point and is directed
     /// towards a randomized sample point around the pixel location (i, j)
@@ -223,8 +208,8 @@ pub const Camera = struct {
     /// Return a vector to a random point in the [-.5,-.5] - [+.5,+.5] unit square
     fn sampleSquare(self: Camera) Vec3 {
         return Vec3.init(
-            util.randomDouble(self.seed) - 0.5,
-            util.randomDouble(self.seed) - 0.5,
+            util.randomDouble(self.prng) - 0.5,
+            util.randomDouble(self.prng) - 0.5,
             0,
         );
     }
@@ -278,7 +263,17 @@ test "Camera" {
     const cameraVu = Vec3.init(4.0, 0, 0);
     const cameraVv = Vec3.init(0, -2.0, 0);
     const cameraUpperLeft = cameraCenter.sub(Vec3.init(0, 0, 2.0)).sub(cameraVu.divScalar(2)).sub(cameraVv.divScalar(2));
+
+    const prngPtr = try std.testing.allocator.create(DefaultPrng);
+    const prng = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+    prngPtr.* = prng;
+
     const camera = Camera{
+        .alloc = std.testing.allocator,
         .focalLength = 2.0,
         .image = .{
             .width = 800,
@@ -294,8 +289,12 @@ test "Camera" {
         .pixel0 = cameraUpperLeft.add(cameraVu.divScalar(800).add(cameraVv.divScalar(400)).mulScalar(0.5)),
         .samplesPerPixel = defaultSamplesPerPixel,
         .pixelSamplesScale = defaultPixelSamplesScale,
+        .prng = prngPtr,
     };
-    const init = Camera.init(400, (16.0 / 9.0), 0xdeadbeef);
+    defer camera.deinit();
+
+    const init = Camera.init(std.testing.allocator, 400, (16.0 / 9.0), 0xdeadbeef);
+    defer init.deinit();
 
     try std.testing.expectEqual(2.0, camera.focalLength);
     try std.testing.expectEqual(800, camera.image.width);
@@ -331,7 +330,8 @@ test "Camera.render()" {
 
     // Figure out aspect ratio, image width, and set a deterministic seed
     const aspectRatio = 16.0 / 9.0;
-    var camera = Camera.init(400, aspectRatio, 0xdeadbeef);
+    var camera = Camera.init(std.testing.allocator, 400, aspectRatio, 0xdeadbeef);
+    defer camera.deinit();
 
     // World
     var world = HittableList.init(std.testing.allocator);
@@ -352,8 +352,10 @@ test "Camera.render()" {
 }
 
 test "Camera.sampleSquare()" {
+    const camera = Camera.init(std.testing.allocator, 400, 1.0, null);
+    defer camera.deinit();
+
     const tests = 1e6;
-    const camera = Camera.init(400, 1.0, null);
     for (0..tests) |_| {
         const sample = camera.sampleSquare();
         try std.testing.expect(-0.5 <= sample.x() and sample.x() <= 0.5);
