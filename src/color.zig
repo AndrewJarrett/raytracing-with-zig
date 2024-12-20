@@ -61,10 +61,20 @@ pub const Color = packed struct {
     pub fn toRgb(self: Color) RGB {
         const interval = Interval.init(0.000, 0.999);
         return .{
-            .r = @intFromFloat(256 * interval.clamp(self.pixel.x())),
-            .g = @intFromFloat(256 * interval.clamp(self.pixel.y())),
-            .b = @intFromFloat(256 * interval.clamp(self.pixel.z())),
+            .r = @intFromFloat(256 * interval.clamp(
+                Color.linearToGamma(self.pixel.x()),
+            )),
+            .g = @intFromFloat(256 * interval.clamp(
+                Color.linearToGamma(self.pixel.y()),
+            )),
+            .b = @intFromFloat(256 * interval.clamp(
+                Color.linearToGamma(self.pixel.z()),
+            )),
         };
+    }
+
+    inline fn linearToGamma(linear: f64) f64 {
+        return if (linear > 0) @sqrt(linear) else 0;
     }
 
     pub fn format(self: Color, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
@@ -149,13 +159,22 @@ test "toRgb()" {
     const rgb = Color.init(0.0, 0.5, 0.75).toRgb();
 
     try std.testing.expectEqual(0, rgb.r);
-    try std.testing.expectEqual(128, rgb.g);
-    try std.testing.expectEqual(192, rgb.b);
+    try std.testing.expectEqual(181, rgb.g);
+    try std.testing.expectEqual(221, rgb.b);
+}
+
+test "linearToGamma()" {
+    try std.testing.expectEqual(0, Color.linearToGamma(-1));
+    try std.testing.expectEqual(0, Color.linearToGamma(0));
+    try std.testing.expectEqual(@sqrt(2.0), Color.linearToGamma(2));
+    try std.testing.expectEqual(2, Color.linearToGamma(4));
+    try std.testing.expectEqual(4, Color.linearToGamma(16));
+    try std.testing.expectEqual(@sqrt(3.0), Color.linearToGamma(3));
 }
 
 test "format()" {
     const c = Color.init(0.0, 0.5, 0.75);
-    const expected = "0 128 192";
+    const expected = "0 181 221";
 
     var buffer: [20]u8 = undefined;
     const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{c});
