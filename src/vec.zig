@@ -1,4 +1,7 @@
 const std = @import("std");
+const util = @import("util.zig");
+
+const DefaultPrng = std.rand.DefaultPrng;
 pub const Point3 = Vec3;
 
 pub const Vec3 = packed struct {
@@ -66,6 +69,42 @@ pub const Vec3 = packed struct {
 
     pub fn lenSquared(self: Vec3) f64 {
         return @reduce(.Add, (self.v * self.v));
+    }
+
+    pub fn random(prng: *DefaultPrng) Vec3 {
+        return Vec3.init(
+            util.randomDouble(prng),
+            util.randomDouble(prng),
+            util.randomDouble(prng),
+        );
+    }
+
+    pub fn randomRange(min: f64, max: f64, prng: *DefaultPrng) Vec3 {
+        return Vec3.init(
+            util.randomDoubleRange(min, max, prng),
+            util.randomDoubleRange(min, max, prng),
+            util.randomDoubleRange(min, max, prng),
+        );
+    }
+
+    pub fn randomUnitVec(prng: *DefaultPrng) Vec3 {
+        while (true) {
+            const p = Vec3.randomRange(-1, 1, prng);
+            const lenSq = p.lenSquared();
+
+            if (1e-160 < lenSq and lenSq <= 1) {
+                return p.divScalar(@sqrt(lenSq));
+            }
+        }
+    }
+
+    pub fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
+        var onUnitSphere = Vec3.randomUnitVec(prng);
+        if (onUnitSphere.dot(normal) > 0.0) {
+            return onUnitSphere;
+        } else {
+            return onUnitSphere.neg();
+        }
     }
 
     pub fn dot(self: Vec3, other: Vec3) f64 {
@@ -189,6 +228,74 @@ test "len()" {
 test "lenSquared()" {
     const lenSquared = Vec3.init(1.0, 0.0, 2.0).lenSquared();
     try std.testing.expectEqual(5.0, lenSquared);
+}
+
+test "random()" {
+    var prng = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+
+    const tests = 1e3;
+    for (0..tests) |_| {
+        const vec = Vec3.random(&prng);
+        try std.testing.expect(0 <= vec.x() and vec.x() < 1.0);
+        try std.testing.expect(0 <= vec.y() and vec.y() < 1.0);
+        try std.testing.expect(0 <= vec.z() and vec.z() < 1.0);
+    }
+
+    // Ensure that two Random structs return the same output when given the
+    // same seed
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.random(&seededPrng);
+    const actual = Vec3.random(&newSeededPrng);
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "randomRange()" {
+    var prng = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+
+    const tests = 1e3;
+    for (0..tests) |_| {
+        const vec = Vec3.randomRange(1, 3, &prng);
+        try std.testing.expect(1 <= vec.x() and vec.x() < 3);
+        try std.testing.expect(1 <= vec.y() and vec.y() < 3);
+        try std.testing.expect(1 <= vec.z() and vec.z() < 3);
+    }
+
+    // Ensure that two Random structs return the same output when given the
+    // same seed
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.randomRange(-1, 0, &seededPrng);
+    const actual = Vec3.randomRange(-1, 0, &newSeededPrng);
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "randomUnitVec()" {
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.randomUnitVec(&seededPrng);
+    const actual = Vec3.randomUnitVec(&newSeededPrng);
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "randomOnHemisphere()" {
+    const normal = Vec3.init(1, 1, -1);
+
+    // Ensure that two Random structs return the same output when given the
+    // same seed
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.randomOnHemisphere(normal, &seededPrng);
+    const actual = Vec3.randomOnHemisphere(normal, &newSeededPrng);
+    try std.testing.expectEqual(expected, actual);
 }
 
 test "dot()" {
