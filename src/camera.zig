@@ -173,7 +173,7 @@ pub const Camera = struct {
     fn rayColor(self: Camera, ray: Ray, depth: usize, world: HittableList) Color {
         if (depth >= self.bounceMax) return Color.init(0, 0, 0);
 
-        if (world.hit(ray, Interval.init(0, inf))) |rec| {
+        if (world.hit(ray, Interval.init(1e-3, inf))) |rec| {
             // Update ray to randomly bounce in a new direction
             const newRay = Ray.init(
                 rec.point,
