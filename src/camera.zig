@@ -9,10 +9,11 @@ const Color3 = @import("color.zig").Color3;
 const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
 const PPM = @import("ppm.zig").PPM;
+const Material = @import("material.zig").Material;
 
 const DefaultPrng = std.rand.DefaultPrng;
 const Allocator = std.mem.Allocator;
-pub const chapter = "chapter9";
+pub const chapter = "chapter10";
 const inf = std.math.inf(f64);
 
 const Image = struct {
@@ -175,11 +176,14 @@ pub const Camera = struct {
 
         if (world.hit(ray, Interval.init(1e-3, inf))) |rec| {
             // Update ray to randomly bounce in a new direction
-            const newRay = Ray.init(
-                rec.point,
-                rec.normal.add(Vec3.randomUnitVec(self.prng)),
-            );
-            return Color.fromVec(self.rayColor(newRay, depth + 1, world).pixel.mulScalar(0.5));
+            if (rec.mat.scatter(ray, rec)) |s| {
+                return Color.fromVec(
+                    self.rayColor(s.scattered, depth + 1, world).pixel
+                        .mul(s.attenuation.pixel),
+                );
+            } else {
+                return Color.init(0, 0, 0);
+            }
         }
 
         // Translate the y value to be between 0-1.
@@ -327,17 +331,55 @@ test "Camera" {
 
 test "Camera.render()" {
     const Hittable = @import("hittable.zig").Hittable;
+    const prngPtr = try testPrng(0xdeadbeef);
+    defer std.testing.allocator.destroy(prngPtr);
+
+    // Materials
+    const matGround = Material.init(.lambertian, Color.init(0.8, 0.8, 0.0), prngPtr);
+    const matCenter = Material.init(.lambertian, Color.init(0.1, 0.2, 0.5), prngPtr);
+    const matLeft = Material.init(.metal, Color.init(0.8, 0.8, 0.8), prngPtr);
+    const matRight = Material.init(.metal, Color.init(0.8, 0.6, 0.2), prngPtr);
+
+    // World
+    var world = HittableList.init(std.testing.allocator);
+    defer world.deinit();
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(0, -100.5, -1),
+            .radius = 100,
+            .mat = matGround,
+        },
+    ));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(0, 0, -1.2),
+            .radius = 0.5,
+            .mat = matCenter,
+        },
+    ));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(-1, 0, -1),
+            .radius = 0.5,
+            .mat = matLeft,
+        },
+    ));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(1, 0, -1),
+            .radius = 0.5,
+            .mat = matRight,
+        },
+    ));
 
     // Figure out aspect ratio, image width, and set a deterministic seed
     const aspectRatio = 16.0 / 9.0;
     var camera = Camera.init(std.testing.allocator, 400, aspectRatio, 0xdeadbeef);
     defer camera.deinit();
-
-    // World
-    var world = HittableList.init(std.testing.allocator);
-    defer world.deinit();
-    world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, 0, -1), .radius = 0.5 }));
-    world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, -100.5, -1), .radius = 100 }));
 
     // Render and save the file
     try camera.render(world);
@@ -362,4 +404,12 @@ test "Camera.sampleSquare()" {
         try std.testing.expect(-0.5 <= sample.y() and sample.y() <= 0.5);
         try std.testing.expectEqual(0, sample.z());
     }
+}
+
+fn testPrng(seed: u64) !*DefaultPrng {
+    const prngPtr = try std.testing.allocator.create(DefaultPrng);
+    const prng = DefaultPrng.init(seed);
+    prngPtr.* = prng;
+
+    return prngPtr;
 }

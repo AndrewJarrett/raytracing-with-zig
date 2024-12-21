@@ -4,13 +4,17 @@ const Point3 = @import("vec.zig").Point3;
 const Ray = @import("ray.zig").Ray;
 const Sphere = @import("sphere.zig").Sphere;
 const Interval = @import("interval.zig").Interval;
+const Material = @import("material.zig").Material;
+const Color = @import("color.zig").Color;
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const DefaultPrng = std.rand.DefaultPrng;
 
 pub const HitRecord = struct {
     point: Point3,
     normal: Vec3,
+    mat: Material,
     t: f64,
     front: bool,
 };
@@ -24,7 +28,7 @@ pub const Hittable = union(HittableType) {
 
     pub fn init(hittable: HittableType, args: anytype) Hittable {
         return switch (hittable) {
-            .sphere => .{ .sphere = Sphere.init(args.center, args.radius) },
+            .sphere => .{ .sphere = Sphere.init(args.center, args.radius, args.mat) },
         };
     }
 
@@ -74,13 +78,18 @@ pub const HittableList = struct {
 };
 
 test "HitRecord" {
+    const prngPtr = try testPrng(0xabadcafe);
+    defer std.testing.allocator.destroy(prngPtr);
+
     const p = Point3.init(0, 0, 0);
     const v = Vec3.init(0, 1, 0);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
     const t = 0.5;
-    const rec = .{ .point = p, .normal = v, .t = t };
+    const rec = .{ .point = p, .normal = v, .mat = mat, .t = t };
 
     try std.testing.expectEqualDeep(p, rec.point);
     try std.testing.expectEqualDeep(v, rec.normal);
+    try std.testing.expectEqual(mat, rec.mat);
     try std.testing.expectEqual(t, rec.t);
 }
 
@@ -90,9 +99,13 @@ test "HittableType" {
 }
 
 test "Hittable.init()" {
+    const prngPtr = try testPrng(0xabadcafe);
+    defer std.testing.allocator.destroy(prngPtr);
+
     const center = Point3.init(0, 0, 0);
     const radius = 1.0;
-    const hittable = Hittable.init(.sphere, .{ .center = center, .radius = radius });
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const hittable = Hittable.init(.sphere, .{ .center = center, .radius = radius, .mat = mat });
 
     try std.testing.expectEqual("sphere", @tagName(hittable));
     try std.testing.expectEqual(center, hittable.sphere.center);
@@ -100,9 +113,13 @@ test "Hittable.init()" {
 }
 
 test "Hittable.hit()" {
+    const prngPtr = try testPrng(0xabadcafe);
+    defer std.testing.allocator.destroy(prngPtr);
+
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const sphere = Sphere.init(center, radius);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const sphere = Sphere.init(center, radius, mat);
     const hittable = Hittable.init(.sphere, sphere);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
@@ -123,33 +140,45 @@ test "HittableList.init() and deinit()" {
 }
 
 test "HittableList.add()" {
+    const prngPtr = try testPrng(0xabadcafe);
+    defer std.testing.allocator.destroy(prngPtr);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+
     var hl = HittableList.init(std.testing.allocator);
     defer hl.deinit();
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -2), .radius = 1.0 }));
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 2, -2), .radius = 1.0 }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -2), .radius = 1.0, .mat = mat }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 2, -2), .radius = 1.0, .mat = mat }));
 
     try std.testing.expectEqual(2, hl.objects.items.len);
 }
 
 test "HittableList.clear()" {
+    const prngPtr = try testPrng(0xabadcafe);
+    defer std.testing.allocator.destroy(prngPtr);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+
     var hl = HittableList.init(std.testing.allocator);
     defer hl.deinit();
 
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -2), .radius = 1.0 }));
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 2, -2), .radius = 1.0 }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -2), .radius = 1.0, .mat = mat }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 2, -2), .radius = 1.0, .mat = mat }));
 
     hl.clear();
     try std.testing.expectEqual(0, hl.objects.items.len);
 }
 
 test "HittableList.hit()" {
+    const prngPtr = try testPrng(0xabadcafe);
+    defer std.testing.allocator.destroy(prngPtr);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+
     var hl = HittableList.init(std.testing.allocator);
     defer hl.deinit();
 
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -2), .radius = 1.0 }));
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -3), .radius = 1.0 }));
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -4), .radius = 1.0 }));
-    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -5), .radius = 1.0 }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -2), .radius = 1.0, .mat = mat }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -3), .radius = 1.0, .mat = mat }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -4), .radius = 1.0, .mat = mat }));
+    hl.add(Hittable.init(.sphere, .{ .center = Vec3.init(0, 0, -5), .radius = 1.0, .mat = mat }));
 
     const ray: Ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
     const hitRecord = hl.hit(ray, Interval.init(-6, 6));
@@ -159,4 +188,12 @@ test "HittableList.hit()" {
     try std.testing.expectEqualDeep(ray.at(1), hitRecord.?.point);
     try std.testing.expectEqualDeep(Vec3.init(0, 0, 1), hitRecord.?.normal);
     try std.testing.expectEqual(true, hitRecord.?.front);
+}
+
+fn testPrng(seed: u64) !*DefaultPrng {
+    const prngPtr = try std.testing.allocator.create(DefaultPrng);
+    const prng = DefaultPrng.init(seed);
+    prngPtr.* = prng;
+
+    return prngPtr;
 }

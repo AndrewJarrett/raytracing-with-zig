@@ -12,8 +12,10 @@ const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
 const Camera = @import("camera.zig").Camera;
 const chapter = @import("camera.zig").chapter;
+const Material = @import("material.zig").Material;
 
 const Allocator = std.mem.Allocator;
+const DefaultPrng = std.rand.DefaultPrng;
 
 const inf = std.math.inf(f64);
 
@@ -22,10 +24,54 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    // Create the World's PRNG
+    const prngPtr = try allocator.create(DefaultPrng);
+    prngPtr.* = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        break :blk seed;
+    });
+
+    // Materials
+    const matGround = Material.init(.lambertian, Color.init(0.8, 0.8, 0.0), prngPtr);
+    const matCenter = Material.init(.lambertian, Color.init(0.1, 0.2, 0.5), prngPtr);
+    const matLeft = Material.init(.metal, Color.init(0.8, 0.8, 0.8), prngPtr);
+    const matRight = Material.init(.metal, Color.init(0.8, 0.6, 0.2), prngPtr);
+
     // World
     var world = HittableList.init(allocator);
-    world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, 0, -1), .radius = 0.5 }));
-    world.add(Hittable.init(.sphere, .{ .center = Point3.init(0, -100.5, -1), .radius = 100 }));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(0, -100.5, -1),
+            .radius = 100,
+            .mat = matGround,
+        },
+    ));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(0, 0, -1.2),
+            .radius = 0.5,
+            .mat = matCenter,
+        },
+    ));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(-1, 0, -1),
+            .radius = 0.5,
+            .mat = matLeft,
+        },
+    ));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(1, 0, -1),
+            .radius = 0.5,
+            .mat = matRight,
+        },
+    ));
 
     // Camera
     const imgWidth = 400;

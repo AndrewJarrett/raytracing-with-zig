@@ -4,15 +4,21 @@ const Vec3 = @import("vec.zig").Vec3;
 const Point3 = @import("vec.zig").Point3;
 const HitRecord = @import("hittable.zig").HitRecord;
 const Interval = @import("interval.zig").Interval;
+const Material = @import("material.zig").Material;
+const Color = @import("color.zig").Color;
+
+const DefaultPrng = std.rand.DefaultPrng;
 
 pub const Sphere = struct {
     center: Point3,
     radius: f64,
+    mat: Material,
 
-    pub fn init(center: Point3, radius: f64) Sphere {
+    pub fn init(center: Point3, radius: f64, mat: Material) Sphere {
         return .{
             .center = center,
             .radius = @max(0, radius),
+            .mat = mat,
         };
     }
 
@@ -42,15 +48,22 @@ pub const Sphere = struct {
             .t = root,
             .point = point,
             .normal = if (front) outwardNormal else outwardNormal.neg(),
+            .mat = self.mat,
             .front = front,
         };
     }
 };
 
 test "init()" {
+    const prngPtr = try std.testing.allocator.create(DefaultPrng);
+    defer std.testing.allocator.destroy(prngPtr);
+    const prng = DefaultPrng.init(0xabadcafe);
+    prngPtr.* = prng;
+
     const center = Point3.init(0, 0, 0);
     const radius = 1.0;
-    const sphere = Sphere.init(center, radius);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const sphere = Sphere.init(center, radius, mat);
 
     try std.testing.expectEqual(Sphere, @TypeOf(sphere));
     try std.testing.expectEqual(center, sphere.center);
@@ -58,9 +71,15 @@ test "init()" {
 }
 
 test "hit() success" {
+    const prngPtr = try std.testing.allocator.create(DefaultPrng);
+    defer std.testing.allocator.destroy(prngPtr);
+    const prng = DefaultPrng.init(0xabadcafe);
+    prngPtr.* = prng;
+
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const sphere = Sphere.init(center, radius);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
@@ -73,9 +92,15 @@ test "hit() success" {
 }
 
 test "hit() hit out of range" {
+    const prngPtr = try std.testing.allocator.create(DefaultPrng);
+    defer std.testing.allocator.destroy(prngPtr);
+    const prng = DefaultPrng.init(0xabadcafe);
+    prngPtr.* = prng;
+
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const sphere = Sphere.init(center, radius);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 0.0));
@@ -83,9 +108,15 @@ test "hit() hit out of range" {
 }
 
 test "hit() no hit" {
+    const prngPtr = try std.testing.allocator.create(DefaultPrng);
+    defer std.testing.allocator.destroy(prngPtr);
+    const prng = DefaultPrng.init(0xabadcafe);
+    prngPtr.* = prng;
+
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const sphere = Sphere.init(center, radius);
+    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, 1));
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));

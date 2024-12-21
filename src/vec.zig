@@ -19,6 +19,11 @@ pub const Vec3 = packed struct {
         };
     }
 
+    pub fn nearZero(self: Vec3) bool {
+        const s: @Vector(3, f64) = @splat(1e-8);
+        return @reduce(.And, self.v < s);
+    }
+
     pub fn x(self: Vec3) f64 {
         return self.v[0];
     }
@@ -107,6 +112,10 @@ pub const Vec3 = packed struct {
         }
     }
 
+    pub fn reflect(self: Vec3, n: Vec3) Vec3 {
+        return self.sub(n.mulScalar(self.dot(n) * 2));
+    }
+
     pub fn dot(self: Vec3, other: Vec3) f64 {
         return @reduce(.Add, self.v * other.v);
     }
@@ -148,6 +157,16 @@ test "zero()" {
     try std.testing.expectEqual(0.0, v.v[0]);
     try std.testing.expectEqual(0.0, v.v[1]);
     try std.testing.expectEqual(0.0, v.v[2]);
+}
+
+test "nearZero()" {
+    const zeroes = Vec3.zero();
+    const big = Vec3.init(1, 1, 1);
+    const small = Vec3.init(1e-9, 1e-9, 1e-9);
+
+    try std.testing.expect(zeroes.nearZero());
+    try std.testing.expect(!big.nearZero());
+    try std.testing.expect(small.nearZero());
 }
 
 test "x(), y(), and z()" {
