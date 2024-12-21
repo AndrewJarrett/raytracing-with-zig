@@ -33,10 +33,22 @@ pub fn main() !void {
     });
 
     // Materials
-    const matGround = Material.init(.lambertian, Color.init(0.8, 0.8, 0.0), prngPtr);
-    const matCenter = Material.init(.lambertian, Color.init(0.1, 0.2, 0.5), prngPtr);
-    const matLeft = Material.init(.metal, Color.init(0.8, 0.8, 0.8), prngPtr);
-    const matRight = Material.init(.metal, Color.init(0.8, 0.6, 0.2), prngPtr);
+    const matGround = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(0.8, 0.8, 0.0), .prng = prngPtr },
+    );
+    const matCenter = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(0.1, 0.2, 0.5), .prng = prngPtr },
+    );
+    const matLeft = Material.init(
+        .metal,
+        .{ .albedo = Color.init(0.8, 0.8, 0.8), .fuzz = 0.3, .prng = prngPtr },
+    );
+    const matRight = Material.init(
+        .metal,
+        .{ .albedo = Color.init(0.8, 0.6, 0.2), .fuzz = 1.0, .prng = prngPtr },
+    );
 
     // World
     var world = HittableList.init(allocator);

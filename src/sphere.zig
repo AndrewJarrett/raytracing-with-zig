@@ -62,7 +62,10 @@ test "init()" {
 
     const center = Point3.init(0, 0, 0);
     const radius = 1.0;
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
     const sphere = Sphere.init(center, radius, mat);
 
     try std.testing.expectEqual(Sphere, @TypeOf(sphere));
@@ -78,7 +81,10 @@ test "hit() success" {
 
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
     const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
@@ -99,7 +105,10 @@ test "hit() hit out of range" {
 
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
     const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, -1));
@@ -115,7 +124,10 @@ test "hit() no hit" {
 
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
     const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray.init(Vec3.init(0, 0, 0), Vec3.init(0, 0, 1));

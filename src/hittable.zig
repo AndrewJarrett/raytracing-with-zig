@@ -83,7 +83,10 @@ test "HitRecord" {
 
     const p = Point3.init(0, 0, 0);
     const v = Vec3.init(0, 1, 0);
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
     const t = 0.5;
     const rec = .{ .point = p, .normal = v, .mat = mat, .t = t };
 
@@ -104,7 +107,10 @@ test "Hittable.init()" {
 
     const center = Point3.init(0, 0, 0);
     const radius = 1.0;
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
     const hittable = Hittable.init(.sphere, .{ .center = center, .radius = radius, .mat = mat });
 
     try std.testing.expectEqual("sphere", @tagName(hittable));
@@ -118,7 +124,10 @@ test "Hittable.hit()" {
 
     const center = Point3.init(0, 0, -2);
     const radius = 1.0;
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
     const sphere = Sphere.init(center, radius, mat);
     const hittable = Hittable.init(.sphere, sphere);
 
@@ -142,7 +151,10 @@ test "HittableList.init() and deinit()" {
 test "HittableList.add()" {
     const prngPtr = try testPrng(0xabadcafe);
     defer std.testing.allocator.destroy(prngPtr);
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
 
     var hl = HittableList.init(std.testing.allocator);
     defer hl.deinit();
@@ -155,7 +167,10 @@ test "HittableList.add()" {
 test "HittableList.clear()" {
     const prngPtr = try testPrng(0xabadcafe);
     defer std.testing.allocator.destroy(prngPtr);
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
 
     var hl = HittableList.init(std.testing.allocator);
     defer hl.deinit();
@@ -170,7 +185,10 @@ test "HittableList.clear()" {
 test "HittableList.hit()" {
     const prngPtr = try testPrng(0xabadcafe);
     defer std.testing.allocator.destroy(prngPtr);
-    const mat = Material.init(.lambertian, Color.init(1, 1, 1), prngPtr);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(1, 1, 1), .prng = prngPtr },
+    );
 
     var hl = HittableList.init(std.testing.allocator);
     defer hl.deinit();
