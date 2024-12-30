@@ -42,8 +42,8 @@ pub fn main() !void {
         .{ .albedo = Color.init(0.1, 0.2, 0.5), .prng = prngPtr },
     );
     const matLeft = Material.init(
-        .metal,
-        .{ .albedo = Color.init(0.8, 0.8, 0.8), .fuzz = 0.3, .prng = prngPtr },
+        .dielectric,
+        .{ .refractionIndex = 1.50 },
     );
     const matRight = Material.init(
         .metal,

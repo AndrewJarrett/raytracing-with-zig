@@ -66,20 +66,48 @@ pub const Metal = struct {
     }
 };
 
+pub const Dielectric = struct {
+    refractionIndex: f64,
+
+    pub fn init(refractionIndex: f64) Dielectric {
+        return .{
+            .refractionIndex = refractionIndex,
+        };
+    }
+
+    pub fn scatter(self: Dielectric, ray: Ray, rec: HitRecord) ?Scatter {
+        const refract = if (rec.front)
+            1.0 / self.refractionIndex
+        else
+            self.refractionIndex;
+
+        const unitDir = ray.dir.unit();
+        const refracted = unitDir.refract(rec.normal, refract);
+
+        return .{
+            .scattered = Ray.init(rec.point, refracted),
+            .attenuation = Color.init(1, 1, 1),
+        };
+    }
+};
+
 pub const MaterialType = enum {
     lambertian,
     metal,
+    dielectric,
 };
 
 pub const MaterialArgs = struct {
-    albedo: Color,
+    albedo: Color = Color.init(1, 1, 1),
     fuzz: f64 = 0,
-    prng: *DefaultPrng,
+    prng: *DefaultPrng = undefined,
+    refractionIndex: f64 = 1.0,
 };
 
 pub const Material = union(MaterialType) {
     lambertian: Lambertian,
     metal: Metal,
+    dielectric: Dielectric,
 
     pub fn init(mat: MaterialType, args: MaterialArgs) Material {
         return switch (mat) {
@@ -89,6 +117,9 @@ pub const Material = union(MaterialType) {
             .metal => .{
                 .metal = Metal.init(args.albedo, args.fuzz, args.prng),
             },
+            .dielectric => .{
+                .dielectric = Dielectric.init(args.refractionIndex),
+            },
         };
     }
 
@@ -96,6 +127,7 @@ pub const Material = union(MaterialType) {
         return switch (self) {
             .lambertian => |l| l.scatter(ray, rec),
             .metal => |m| m.scatter(ray, rec),
+            .dielectric => |d| d.scatter(ray, rec),
         };
     }
 };
@@ -169,6 +201,30 @@ test "Metal" {
 
     try std.testing.expectEqual(albedo, metal.albedo);
     try std.testing.expectEqual(prngPtr, metal.prng);
+    try std.testing.expectEqual(albedo, s.?.attenuation);
+    try std.testing.expectEqualDeep(expectedRay, s.?.scattered);
+}
+
+test "Dielectric" {
+    const albedo = Color.init(1, 1, 1);
+    const refract = 1.50;
+
+    const dielectric = Dielectric.init(refract);
+    const normal = Vec3.init(0, 0, 1);
+    const point = Vec3.init(0, 0, -1);
+    const s = dielectric.scatter(
+        Ray.init(Vec3.init(0, 0, 0), point),
+        HitRecord{
+            .point = point,
+            .normal = normal,
+            .mat = Material.init(.dielectric, .{ .refractionIndex = refract }),
+            .t = 0,
+            .front = true,
+        },
+    );
+    const expectedRay = Ray.init(point, point.refract(normal, 1.0 / refract));
+
+    try std.testing.expectEqual(refract, dielectric.refractionIndex);
     try std.testing.expectEqual(albedo, s.?.attenuation);
     try std.testing.expectEqualDeep(expectedRay, s.?.scattered);
 }

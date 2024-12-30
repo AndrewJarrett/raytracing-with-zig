@@ -13,7 +13,7 @@ const Material = @import("material.zig").Material;
 
 const DefaultPrng = std.rand.DefaultPrng;
 const Allocator = std.mem.Allocator;
-pub const chapter = "chapter10";
+pub const chapter = "chapter11";
 const inf = std.math.inf(f64);
 
 const Image = struct {
@@ -344,8 +344,8 @@ test "Camera.render()" {
         .{ .albedo = Color.init(0.1, 0.2, 0.5), .prng = prngPtr },
     );
     const matLeft = Material.init(
-        .metal,
-        .{ .albedo = Color.init(0.8, 0.8, 0.8), .fuzz = 0.3, .prng = prngPtr },
+        .dielectric,
+        .{ .refractionIndex = 1.50 },
     );
     const matRight = Material.init(
         .metal,

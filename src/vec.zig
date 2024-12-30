@@ -116,6 +116,13 @@ pub const Vec3 = packed struct {
         return self.sub(n.mulScalar(self.dot(n) * 2));
     }
 
+    pub fn refract(self: Vec3, n: Vec3, etaiOverEtat: f64) Vec3 {
+        const cosTheta: f64 = @min(self.neg().dot(n), 1);
+        const rPerp = self.add(n.mulScalar(cosTheta)).mulScalar(etaiOverEtat);
+        const rParallel = n.mulScalar(-@sqrt(@abs(1.0 - rPerp.lenSquared())));
+        return rPerp.add(rParallel);
+    }
+
     pub fn dot(self: Vec3, other: Vec3) f64 {
         return @reduce(.Add, self.v * other.v);
     }
