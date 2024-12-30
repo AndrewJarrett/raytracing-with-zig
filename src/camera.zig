@@ -344,10 +344,10 @@ test "Camera" {
     try std.testing.expectEqual(height * init.focalLength * @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225)), init.viewport.width);
     try std.testing.expectEqual(height * init.focalLength, init.viewport.height);
     try std.testing.expectEqual(90, init.viewport.vFov);
-    try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), init.center);
-    try std.testing.expectEqualDeep(Vec3.init(0.008888888888888887, 0, 0), init.du);
-    try std.testing.expectEqualDeep(Vec3.init(0, -0.008888888888888887, 0), init.dv);
-    try std.testing.expectEqualDeep(Vec3.init(-1.773333333333333e0, 9.955555555555554e-1, -1e0), init.pixel0);
+    try std.testing.expectEqualDeep(Vec3.init(-2, 2, 1), init.center);
+    try std.testing.expectEqualDeep(Vec3.init(2.177324215807269e-2, 0e0, 2.177324215807269e-2), init.du);
+    try std.testing.expectEqualDeep(Vec3.init(-1.2570787221094178e-2, -2.5141574442188355e-2, 1.2570787221094178e-2), init.dv);
+    try std.testing.expectEqualDeep(Vec3.init(-2.9358336417729536e0, 2.8158563375250956e0, -6.75168997929805e0), init.pixel0);
     try std.testing.expectEqual(defaultSamplesPerPixel, init.samplesPerPixel);
     try std.testing.expectEqual(defaultPixelSamplesScale, init.pixelSamplesScale);
     try std.testing.expectEqual(0xdeadbeef, init.seed);
