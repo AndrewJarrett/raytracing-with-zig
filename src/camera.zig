@@ -345,7 +345,11 @@ test "Camera.render()" {
     );
     const matLeft = Material.init(
         .dielectric,
-        .{ .refractionIndex = 1.0 / 1.33 },
+        .{ .refractionIndex = 1.5, .prng = prngPtr },
+    );
+    const matBubble = Material.init(
+        .dielectric,
+        .{ .refractionIndex = 1.0 / 1.5, .prng = prngPtr },
     );
     const matRight = Material.init(
         .metal,
@@ -377,6 +381,14 @@ test "Camera.render()" {
             .center = Point3.init(-1, 0, -1),
             .radius = 0.5,
             .mat = matLeft,
+        },
+    ));
+    world.add(Hittable.init(
+        .sphere,
+        .{
+            .center = Point3.init(-1, 0, -1),
+            .radius = 0.4,
+            .mat = matBubble,
         },
     ));
     world.add(Hittable.init(

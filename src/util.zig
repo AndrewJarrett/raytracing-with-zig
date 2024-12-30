@@ -16,7 +16,7 @@ pub inline fn randomDouble(prng: *DefaultPrng) f64 {
     return prng.random().float(f64);
 }
 
-/// Return a randomg double/f64 in a specfic range of [min,max)
+/// Return a random double/f64 in a specific range of [min,max)
 pub inline fn randomDoubleRange(min: f64, max: f64, prng: *DefaultPrng) f64 {
     return min + (max - min) * randomDouble(prng);
 }
