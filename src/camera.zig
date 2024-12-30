@@ -345,7 +345,7 @@ test "Camera.render()" {
     );
     const matLeft = Material.init(
         .dielectric,
-        .{ .refractionIndex = 1.50 },
+        .{ .refractionIndex = 1.0 / 1.33 },
     );
     const matRight = Material.init(
         .metal,
