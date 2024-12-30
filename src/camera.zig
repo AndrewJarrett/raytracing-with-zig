@@ -13,7 +13,7 @@ const Material = @import("material.zig").Material;
 
 const DefaultPrng = std.rand.DefaultPrng;
 const Allocator = std.mem.Allocator;
-pub const chapter = "chapter11";
+pub const chapter = "chapter12";
 const inf = std.math.inf(f64);
 
 const Image = struct {
@@ -46,18 +46,21 @@ const Image = struct {
     }
 };
 
-const defaultViewportHeight = 2.0;
 const Viewport = struct {
     width: f64,
-    height: f64 = defaultViewportHeight,
+    height: f64,
+    vFov: f64,
 
-    pub fn init(img: Image) Viewport {
-        const height = defaultViewportHeight;
+    pub fn init(img: Image, vFov: f64, focalLength: f64) Viewport {
+        const theta = std.math.degreesToRadians(vFov);
+        const h = std.math.tan(theta / 2.0);
+        const height = 2 * h * focalLength;
         const width = height * (@as(f64, @floatFromInt(img.width)) / @as(f64, @floatFromInt(img.height)));
 
         return .{
             .width = width,
             .height = height,
+            .vFov = vFov,
         };
     }
 
@@ -65,15 +68,21 @@ const Viewport = struct {
         _ = fmt;
         _ = options;
 
-        try writer.print("{d}x{d}", .{ self.width, self.height });
+        try writer.print("{d:.2}x{d:.2} @ {d}", .{ self.width, self.height, self.vFov });
     }
 };
 
-const defaultCameraCenter = Point3.init(0, 0, 0);
-const defaultFocalLength = 1.0;
+const defaultCameraCenter = Point3.init(-2, 2, 1);
 const defaultSamplesPerPixel = 100;
 const defaultPixelSamplesScale = 1.0 / @as(f64, @floatFromInt(defaultSamplesPerPixel));
 const defaultBounceMax = 50;
+const defaultLookFrom = defaultCameraCenter;
+const defaultLookAt = Point3.init(0, 0, -1);
+const defaultVUp = Vec3.init(0, 1, 0);
+const defaultFocalLength = defaultLookFrom.sub(defaultLookAt).len();
+const defaultW = defaultLookFrom.sub(defaultLookAt).unit();
+const defaultU = defaultVUp.cross(defaultW).unit();
+const defaultV = defaultW.cross(defaultU);
 pub const Camera = struct {
     alloc: Allocator,
     focalLength: f64 = defaultFocalLength,
@@ -86,6 +95,12 @@ pub const Camera = struct {
     samplesPerPixel: usize = defaultSamplesPerPixel,
     pixelSamplesScale: f64 = defaultPixelSamplesScale,
     bounceMax: usize = defaultBounceMax,
+    lookFrom: Point3 = defaultLookFrom,
+    lookAt: Point3 = defaultLookAt,
+    vUp: Vec3 = defaultVUp,
+    u: Vec3 = defaultU,
+    v: Vec3 = defaultV,
+    w: Vec3 = defaultW,
     seed: ?u64 = null,
     prng: *DefaultPrng,
 
@@ -93,15 +108,18 @@ pub const Camera = struct {
     /// aspect ratio in order to setup a Camera. Do not set fields manually unless you
     /// are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio.
-    pub fn init(alloc: Allocator, width: usize, aspectRatio: f64, seed: ?u64) Camera {
+    pub fn init(alloc: Allocator, width: usize, aspectRatio: f64, vFov: f64, seed: ?u64) Camera {
         const img = Image.init(width, aspectRatio);
-        const vp = Viewport.init(img);
-        const vu = Vec3.init(vp.width, 0, 0);
-        const vv = Vec3.init(0, -vp.height, 0);
+        const vp = Viewport.init(img, vFov, defaultFocalLength);
+        const vu = defaultU.mulScalar(vp.width);
+        const vv = defaultV.mulScalar(-vp.height);
         const du = vu.divScalar(@floatFromInt(img.width));
         const dv = vv.divScalar(@floatFromInt(img.height));
 
-        const viewportUpperLeft = defaultCameraCenter.sub(Vec3.init(0, 0, defaultFocalLength)).sub(vu.divScalar(2)).sub(vv.divScalar(2));
+        const viewportUpperLeft = defaultCameraCenter
+            .sub(defaultW.mulScalar(defaultFocalLength))
+            .sub(vu.divScalar(2))
+            .sub(vv.divScalar(2));
         const pixel0 = viewportUpperLeft.add(du.add(dv).mulScalar(0.5));
 
         // If there is a seed provided, then initialize the PRNG with that seed
@@ -245,20 +263,22 @@ test "Image" {
 }
 
 test "Viewport" {
-    const vp = Viewport{ .width = 16.0, .height = 2.0 };
+    const vFov = 90;
+    const height = 2.0 * @tan(std.math.degreesToRadians(vFov) / 2.0) * 2.0;
+    const vp = Viewport{ .width = 16.0, .height = height, .vFov = 90 };
     const aspectRatio = @as(f64, @floatFromInt(16)) / @as(f64, @floatFromInt(9));
     const imgRatio = @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225));
     const img = Image.init(400, aspectRatio);
-    const vp2 = Viewport.init(img);
-    const expected = "16x2";
+    const vp2 = Viewport.init(img, 90, 2.0);
+    const expected = "16.00x4.00 @ 90";
 
     var buffer: [20]u8 = undefined;
     const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{vp});
 
     try std.testing.expectEqual(16.0, vp.width);
-    try std.testing.expectEqual(2.0, vp.height);
-    try std.testing.expectEqual(2.0 * imgRatio, vp2.width);
-    try std.testing.expectEqual(2.0, vp2.height);
+    try std.testing.expectEqual(height, vp.height);
+    try std.testing.expectEqual(height * imgRatio, vp2.width);
+    try std.testing.expectEqual(height, vp2.height);
     try std.testing.expectEqualStrings(expected, actual);
 }
 
@@ -276,6 +296,8 @@ test "Camera" {
     });
     prngPtr.* = prng;
 
+    const height = 2.0 * @tan(std.math.degreesToRadians(90) / 2.0);
+
     const camera = Camera{
         .alloc = std.testing.allocator,
         .focalLength = 2.0,
@@ -286,6 +308,7 @@ test "Camera" {
         .viewport = .{
             .width = 4.0,
             .height = 2.0,
+            .vFov = 90,
         },
         .center = Vec3.init(0, 0, 0),
         .du = cameraVu.divScalar(800),
@@ -297,7 +320,7 @@ test "Camera" {
     };
     defer camera.deinit();
 
-    const init = Camera.init(std.testing.allocator, 400, (16.0 / 9.0), 0xdeadbeef);
+    const init = Camera.init(std.testing.allocator, 400, (16.0 / 9.0), 90, 0xdeadbeef);
     defer init.deinit();
 
     try std.testing.expectEqual(2.0, camera.focalLength);
@@ -314,16 +337,17 @@ test "Camera" {
     try std.testing.expectEqual(defaultPixelSamplesScale, camera.pixelSamplesScale);
     try std.testing.expectEqual(null, camera.seed);
 
-    try std.testing.expectEqual(1.0, init.focalLength);
+    try std.testing.expectEqual(init.lookFrom.sub(init.lookAt).len(), init.focalLength);
     try std.testing.expectEqual(400, init.image.width);
     try std.testing.expectEqual(225, init.image.height);
     try std.testing.expectEqual(16.0 / 9.0, init.image.aspectRatio());
-    try std.testing.expectEqual(2.0 * @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225)), init.viewport.width);
-    try std.testing.expectEqual(2.0, init.viewport.height);
-    try std.testing.expectEqual(Vec3.init(0, 0, 0), init.center);
-    try std.testing.expectEqual(Vec3.init(0.008888888888888889, 0, 0), init.du);
-    try std.testing.expectEqual(Vec3.init(0, -0.008888888888888889, 0), init.dv);
-    try std.testing.expectEqual(Vec3.init(-1.7733333333333332, 0.9955555555555555, -1), init.pixel0);
+    try std.testing.expectEqual(height * init.focalLength * @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225)), init.viewport.width);
+    try std.testing.expectEqual(height * init.focalLength, init.viewport.height);
+    try std.testing.expectEqual(90, init.viewport.vFov);
+    try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), init.center);
+    try std.testing.expectEqualDeep(Vec3.init(0.008888888888888887, 0, 0), init.du);
+    try std.testing.expectEqualDeep(Vec3.init(0, -0.008888888888888887, 0), init.dv);
+    try std.testing.expectEqualDeep(Vec3.init(-1.773333333333333e0, 9.955555555555554e-1, -1e0), init.pixel0);
     try std.testing.expectEqual(defaultSamplesPerPixel, init.samplesPerPixel);
     try std.testing.expectEqual(defaultPixelSamplesScale, init.pixelSamplesScale);
     try std.testing.expectEqual(0xdeadbeef, init.seed);
@@ -337,7 +361,7 @@ test "Camera.render()" {
     // Materials
     const matGround = Material.init(
         .lambertian,
-        .{ .albedo = Color.init(0.8, 0.8, 0.0), .prng = prngPtr },
+        .{ .albedo = Color.init(0.8, 0.8, 0), .prng = prngPtr },
     );
     const matCenter = Material.init(
         .lambertian,
@@ -363,7 +387,7 @@ test "Camera.render()" {
         .sphere,
         .{
             .center = Point3.init(0, -100.5, -1),
-            .radius = 100,
+            .radius = 100.0,
             .mat = matGround,
         },
     ));
@@ -402,7 +426,7 @@ test "Camera.render()" {
 
     // Figure out aspect ratio, image width, and set a deterministic seed
     const aspectRatio = 16.0 / 9.0;
-    var camera = Camera.init(std.testing.allocator, 400, aspectRatio, 0xdeadbeef);
+    var camera = Camera.init(std.testing.allocator, 400, aspectRatio, 20, 0xdeadbeef);
     defer camera.deinit();
 
     // Render and save the file
@@ -418,7 +442,7 @@ test "Camera.render()" {
 }
 
 test "Camera.sampleSquare()" {
-    const camera = Camera.init(std.testing.allocator, 400, 1.0, null);
+    const camera = Camera.init(std.testing.allocator, 400, 1.0, 90, null);
     defer camera.deinit();
 
     const tests = 1e6;

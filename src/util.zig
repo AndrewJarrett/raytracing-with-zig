@@ -2,7 +2,7 @@ const std = @import("std");
 
 const DefaultPrng = std.rand.DefaultPrng;
 
-const pi = std.math.pi;
+pub const pi = std.math.pi;
 
 /// Convert degrees to radians as an f64
 pub inline fn degToRad(degrees: f64) f64 {

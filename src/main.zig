@@ -1,4 +1,5 @@
 const std = @import("std");
+const util = @import("util.zig");
 
 const PPM = @import("ppm.zig").PPM;
 const Color = @import("color.zig").Color;
@@ -35,7 +36,7 @@ pub fn main() !void {
     // Materials
     const matGround = Material.init(
         .lambertian,
-        .{ .albedo = Color.init(0.8, 0.8, 0.0), .prng = prngPtr },
+        .{ .albedo = Color.init(0.8, 0.8, 0), .prng = prngPtr },
     );
     const matCenter = Material.init(
         .lambertian,
@@ -60,7 +61,7 @@ pub fn main() !void {
         .sphere,
         .{
             .center = Point3.init(0, -100.5, -1),
-            .radius = 100,
+            .radius = 100.0,
             .mat = matGround,
         },
     ));
@@ -100,7 +101,7 @@ pub fn main() !void {
     // Camera
     const imgWidth = 400;
     const aspectRatio = 16.0 / 9.0;
-    const camera = Camera.init(allocator, imgWidth, aspectRatio, null);
+    const camera = Camera.init(allocator, imgWidth, aspectRatio, 20, null);
     defer camera.deinit();
 
     // Render
