@@ -101,7 +101,9 @@ pub fn main() !void {
     // Camera
     const imgWidth = 400;
     const aspectRatio = 16.0 / 9.0;
-    const camera = Camera.init(allocator, imgWidth, aspectRatio, 20, null);
+    const camera = Camera.init(allocator, imgWidth, aspectRatio)
+        .setViewport(Point3.init(-2, 2, 1), Point3.init(0, 0, -1), 20)
+        .build();
     defer camera.deinit();
 
     // Render
