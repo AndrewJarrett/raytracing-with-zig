@@ -13,7 +13,7 @@ const Material = @import("material.zig").Material;
 
 const DefaultPrng = std.rand.DefaultPrng;
 const Allocator = std.mem.Allocator;
-pub const chapter = "chapter13";
+pub const chapter = "chapter14";
 const inf = std.math.inf(f64);
 
 const Image = struct {
@@ -556,70 +556,94 @@ test "Camera.render()" {
     const prngPtr = try testPrng(0xdeadbeef);
     defer std.testing.allocator.destroy(prngPtr);
 
-    // Materials
-    const matGround = Material.init(
-        .lambertian,
-        .{ .albedo = Color.init(0.8, 0.8, 0), .prng = prngPtr },
-    );
-    const matCenter = Material.init(
-        .lambertian,
-        .{ .albedo = Color.init(0.1, 0.2, 0.5), .prng = prngPtr },
-    );
-    const matLeft = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.5, .prng = prngPtr },
-    );
-    const matBubble = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.0 / 1.5, .prng = prngPtr },
-    );
-    const matRight = Material.init(
-        .metal,
-        .{ .albedo = Color.init(0.8, 0.6, 0.2), .fuzz = 1.0, .prng = prngPtr },
-    );
-
     // World
     var world = HittableList.init(std.testing.allocator);
     defer world.deinit();
+
+    // Materials and objects
+    // Ground
+    const matGround = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(0.5, 0.5, 0.5), .prng = prngPtr },
+    );
+    world.add(Hittable.init(.sphere, .{
+        .center = Point3.init(0, -1000, 0),
+        .radius = 1000,
+        .mat = matGround,
+    }));
+
+    // Generate random spheres and materials
+    for (0..22) |a| {
+        const xOffset: f64 = @as(f64, @floatFromInt(a)) - 11;
+        for (0..22) |b| {
+            const zOffset: f64 = @as(f64, @floatFromInt(b)) - 11;
+
+            const chooseMat = util.randomDouble(prngPtr);
+            const center = Point3.init(
+                xOffset + 0.9 * util.randomDouble(prngPtr),
+                0.2,
+                zOffset + 0.9 * util.randomDouble(prngPtr),
+            );
+
+            if (center.sub(Point3.init(4, 0.2, 0)).len() > 0.9) {
+                // 5% chance of glass
+                var sphereMaterial = Material.init(.dielectric, .{
+                    .refractionIndex = 1.5,
+                    .prng = prngPtr,
+                });
+
+                if (chooseMat < 0.8) {
+                    // 80% is diffuse material
+                    const albedo = Color.fromVec(Color3.random(prngPtr).mul(Color3.random(prngPtr)));
+                    sphereMaterial = Material.init(.lambertian, .{
+                        .albedo = albedo,
+                        .prng = prngPtr,
+                    });
+                } else if (chooseMat < 0.95) {
+                    // 15% metal
+                    const albedo = Color.fromVec(Color3.randomRange(0.5, 1, prngPtr));
+                    const fuzz = util.randomDoubleRange(0, 0.5, prngPtr);
+                    sphereMaterial = Material.init(.metal, .{
+                        .albedo = albedo,
+                        .fuzz = fuzz,
+                        .prng = prngPtr,
+                    });
+                }
+
+                world.add(Hittable.init(.sphere, .{
+                    .center = center,
+                    .radius = 0.2,
+                    .mat = sphereMaterial,
+                }));
+            }
+        }
+    }
+
+    const mat1 = Material.init(
+        .dielectric,
+        .{ .refractionIndex = 1.5, .prng = prngPtr },
+    );
     world.add(Hittable.init(
         .sphere,
-        .{
-            .center = Point3.init(0, -100.5, -1),
-            .radius = 100.0,
-            .mat = matGround,
-        },
+        .{ .center = Point3.init(0, 1, 0), .radius = 1, .mat = mat1 },
     ));
+
+    const mat2 = Material.init(
+        .lambertian,
+        .{ .albedo = Color.init(0.4, 0.2, 0.1), .prng = prngPtr },
+    );
     world.add(Hittable.init(
         .sphere,
-        .{
-            .center = Point3.init(0, 0, -1.2),
-            .radius = 0.5,
-            .mat = matCenter,
-        },
+        .{ .center = Point3.init(-4, 1, 0), .radius = 1, .mat = mat2 },
     ));
+
+    const mat3 = Material.init(
+        .metal,
+        .{ .albedo = Color.init(0.7, 0.6, 0.5), .fuzz = 0, .prng = prngPtr },
+    );
     world.add(Hittable.init(
         .sphere,
-        .{
-            .center = Point3.init(-1, 0, -1),
-            .radius = 0.5,
-            .mat = matLeft,
-        },
-    ));
-    world.add(Hittable.init(
-        .sphere,
-        .{
-            .center = Point3.init(-1, 0, -1),
-            .radius = 0.4,
-            .mat = matBubble,
-        },
-    ));
-    world.add(Hittable.init(
-        .sphere,
-        .{
-            .center = Point3.init(1, 0, -1),
-            .radius = 0.5,
-            .mat = matRight,
-        },
+        .{ .center = Point3.init(4, 1, 0), .radius = 1, .mat = mat3 },
     ));
 
     // Figure out aspect ratio, image width, and set a deterministic seed
