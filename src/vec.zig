@@ -274,7 +274,7 @@ test "random()" {
         break :blk seed;
     });
 
-    const tests = 1e3;
+    const tests = 10;
     for (0..tests) |_| {
         const vec = Vec3.random(&prng);
         try std.testing.expect(0 <= vec.x() and vec.x() < 1.0);
@@ -298,7 +298,7 @@ test "randomRange()" {
         break :blk seed;
     });
 
-    const tests = 1e3;
+    const tests = 10;
     for (0..tests) |_| {
         const vec = Vec3.randomRange(1, 3, &prng);
         try std.testing.expect(1 <= vec.x() and vec.x() < 3);

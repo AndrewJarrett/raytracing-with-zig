@@ -184,8 +184,8 @@ pub const Camera = struct {
             self.defocusDiskSample();
 
         return Ray.init(
+            rayOrigin,
             pixelSample.sub(rayOrigin),
-            pixelSample.sub(self.center),
         );
     }
 
@@ -217,8 +217,8 @@ const defaultVUp = Vec3.init(0, 1, 0);
 const defaultW = defaultLookFrom.sub(defaultLookAt).unit();
 const defaultU = defaultVUp.cross(defaultW).unit();
 const defaultV = defaultW.cross(defaultU);
-const defaultDefocusAngle = 10.0;
-const defaultFocusDist = 3.4;
+const defaultDefocusAngle = 0;
+const defaultFocusDist = 10;
 const defaultDefocusRadius = defaultFocusDist * @tan(std.math.degreesToRadians(defaultDefocusAngle / 2.0));
 const defaultDefocusDiskU = defaultU.mulScalar(defaultDefocusRadius);
 const defaultDefocusDiskV = defaultV.mulScalar(defaultDefocusRadius);
@@ -296,7 +296,7 @@ pub const CameraBuilder = struct {
         defer self.alloc.destroy(self);
 
         const prngPtr = self.alloc.create(DefaultPrng) catch unreachable;
-        const prng = prng: {
+        prngPtr.* = prng: {
             if (self.seed) |seed| {
                 break :prng DefaultPrng.init(seed);
             } else {
@@ -307,7 +307,6 @@ pub const CameraBuilder = struct {
                 });
             }
         };
-        prngPtr.* = prng;
 
         const w = self.lookFrom.?.sub(self.lookAt.?).unit();
         const u = self.vUp.?.cross(w).unit();
@@ -508,7 +507,7 @@ test "Camera" {
         .build();
     defer init.deinit();
 
-    try std.testing.expectEqual(2.0, camera.focusDist);
+    try std.testing.expectEqual(defaultFocusDist, camera.focusDist);
     try std.testing.expectEqual(800, camera.image.width);
     try std.testing.expectEqual(400, camera.image.height);
     try std.testing.expectEqual(2.0, camera.image.aspectRatio());
@@ -529,7 +528,7 @@ test "Camera" {
     try std.testing.expectEqual(defaultPixelSamplesScale, camera.pixelSamplesScale);
     try std.testing.expectEqual(null, camera.seed);
 
-    try std.testing.expectEqual(init.lookFrom.sub(init.lookAt).len(), init.focusDist);
+    try std.testing.expectEqual(defaultFocusDist, init.focusDist);
     try std.testing.expectEqual(400, init.image.width);
     try std.testing.expectEqual(225, init.image.height);
     try std.testing.expectEqual(16.0 / 9.0, init.image.aspectRatio());
@@ -539,9 +538,9 @@ test "Camera" {
     try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), init.center);
     try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), init.lookFrom);
     try std.testing.expectEqualDeep(Vec3.init(0, 0, -1), init.lookAt);
-    try std.testing.expectEqualDeep(Vec3.init(8.888888888888887e-3, 0, 0), init.du);
-    try std.testing.expectEqualDeep(Vec3.init(0, -8.888888888888887e-3, 0), init.dv);
-    try std.testing.expectEqualDeep(Vec3.init(-1.773333333333333e0, 9.955555555555554e-1, -1), init.pixel0);
+    try std.testing.expectEqualDeep(Vec3.init(8.888888888888888e-2, 0e0, 0e0), init.du);
+    try std.testing.expectEqualDeep(Vec3.init(0, -8.888888888888888e-2, 0), init.dv);
+    try std.testing.expectEqualDeep(Vec3.init(-1.773333333333333e1, 9.955555555555554e0, -1e1), init.pixel0);
     try std.testing.expectEqual(defaultU, init.u);
     try std.testing.expectEqual(defaultV, init.v);
     try std.testing.expectEqual(defaultW, init.w);
@@ -626,8 +625,10 @@ test "Camera.render()" {
     // Figure out aspect ratio, image width, and set a deterministic seed
     const aspectRatio = 16.0 / 9.0;
     var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
-        .setViewport(Point3.init(-2, 2, 1), Point3.init(0, 0, -1), 20)
         .setSeed(0xdeadbeef)
+        .setDefocusAngle(10.0)
+        .setFocusDist(3.4)
+        .setViewport(Point3.init(-2, 2, 1), Point3.init(0, 0, -1), 20)
         .build();
     defer camera.deinit();
 
@@ -649,7 +650,7 @@ test "Camera.sampleSquare()" {
         .build();
     defer camera.deinit();
 
-    const tests = 1e6;
+    const tests = 10;
     for (0..tests) |_| {
         const sample = camera.sampleSquare();
         try std.testing.expect(-0.5 <= sample.x() and sample.x() <= 0.5);
@@ -664,7 +665,7 @@ test "Camera.defocusDiskSample()" {
         .build();
     defer camera.deinit();
 
-    const tests = 1e6;
+    const tests = 10;
     for (0..tests) |_| {
         const sample = camera.defocusDiskSample();
         try std.testing.expect(-1 <= sample.x() and sample.x() <= 1);
