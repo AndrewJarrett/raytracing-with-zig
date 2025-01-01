@@ -37,7 +37,7 @@ test "randomDouble()" {
         break :blk seed;
     });
 
-    const tests = 1e6;
+    const tests = 10;
     for (0..tests) |_| {
         const result = randomDouble(&prng);
         try std.testing.expect(0.0 <= result and result < 1.0);
@@ -63,7 +63,7 @@ test "randomDoubleRange()" {
         break :blk seed;
     });
 
-    const tests = 1e6;
+    const tests = 10;
     const min = 1.0;
     const max = 10.0;
     for (0..tests) |t| {

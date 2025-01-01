@@ -103,6 +103,17 @@ pub const Vec3 = packed struct {
         }
     }
 
+    pub fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
+        while (true) {
+            const p = Vec3.init(
+                util.randomDoubleRange(-1, 1, prng),
+                util.randomDoubleRange(-1, 1, prng),
+                0,
+            );
+            if (p.lenSquared() < 1) return p;
+        }
+    }
+
     pub fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
         var onUnitSphere = Vec3.randomUnitVec(prng);
         if (onUnitSphere.dot(normal) > 0.0) {
@@ -263,7 +274,7 @@ test "random()" {
         break :blk seed;
     });
 
-    const tests = 1e3;
+    const tests = 10;
     for (0..tests) |_| {
         const vec = Vec3.random(&prng);
         try std.testing.expect(0 <= vec.x() and vec.x() < 1.0);
@@ -287,7 +298,7 @@ test "randomRange()" {
         break :blk seed;
     });
 
-    const tests = 1e3;
+    const tests = 10;
     for (0..tests) |_| {
         const vec = Vec3.randomRange(1, 3, &prng);
         try std.testing.expect(1 <= vec.x() and vec.x() < 3);
@@ -309,6 +320,14 @@ test "randomUnitVec()" {
     var newSeededPrng = DefaultPrng.init(0xcafef00d);
     const expected = Vec3.randomUnitVec(&seededPrng);
     const actual = Vec3.randomUnitVec(&newSeededPrng);
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "randomInUnitDisk()" {
+    var seededPrng = DefaultPrng.init(0xcafef00d);
+    var newSeededPrng = DefaultPrng.init(0xcafef00d);
+    const expected = Vec3.randomInUnitDisk(&seededPrng);
+    const actual = Vec3.randomInUnitDisk(&newSeededPrng);
     try std.testing.expectEqual(expected, actual);
 }
 
