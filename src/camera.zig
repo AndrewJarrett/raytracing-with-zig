@@ -10,6 +10,7 @@ const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
 const PPM = @import("ppm.zig").PPM;
 const Material = @import("material.zig").Material;
+const Scene = @import("Scene.zig");
 
 const DefaultPrng = std.rand.DefaultPrng;
 const Allocator = std.mem.Allocator;
@@ -76,7 +77,7 @@ pub const Camera = struct {
     alloc: Allocator,
     image: Image,
     viewport: Viewport,
-    seed: ?u64 = null,
+    scene: Scene,
     center: Point3 = defaultCameraCenter,
     samplesPerPixel: usize = defaultSamplesPerPixel,
     pixelSamplesScale: f64 = defaultPixelSamplesScale,
@@ -91,7 +92,6 @@ pub const Camera = struct {
     defocusDiskU: Vec3 = defaultDefocusDiskU, // Defocus disk horizontal radius
     defocusDiskV: Vec3 = defaultDefocusDiskV, // Defocus disk vertical radius
     defocusAngle: f64 = defaultDefocusAngle,
-    prng: *DefaultPrng,
     du: Vec3, // Offset to pixel to the right
     dv: Vec3, // Offset to pixel below
     pixel0: Point3, // Location of pixel (0, 0)
@@ -111,16 +111,12 @@ pub const Camera = struct {
     }
 
     pub fn deinit(self: Camera) void {
-        self.alloc.destroy(self.prng);
+        self.scene.deinit();
     }
 
-    pub fn render(self: Camera, world: HittableList) !void {
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer arena.deinit();
-        const allocator = arena.allocator();
-
+    pub fn render(self: Camera) !void {
         // Setup Image/PPM
-        var ppm = PPM.init(allocator, self.image.width, self.image.height);
+        var ppm = PPM.init(self.alloc, self.image.width, self.image.height);
         defer ppm.deinit();
 
         for (0..ppm.height) |j| {
@@ -130,7 +126,7 @@ pub const Camera = struct {
                 // Anti-aliasing sampling
                 for (0..self.samplesPerPixel) |_| {
                     const ray = self.getRay(i, j);
-                    const color = self.rayColor(ray, 0, world);
+                    const color = self.rayColor(ray, 0, self.scene.world);
                     pixelColor.pixel = pixelColor.pixel.add(color.pixel);
                 }
                 const avgColor = Color.fromVec(pixelColor.pixel.mulScalar(self.pixelSamplesScale));
@@ -192,15 +188,15 @@ pub const Camera = struct {
     /// Return a vector to a random point in the [-.5,-.5] - [+.5,+.5] unit square
     fn sampleSquare(self: Camera) Vec3 {
         return Vec3.init(
-            util.randomDouble(self.prng) - 0.5,
-            util.randomDouble(self.prng) - 0.5,
+            util.randomDouble(self.scene.prng) - 0.5,
+            util.randomDouble(self.scene.prng) - 0.5,
             0,
         );
     }
 
     /// Returns a random point in the camera defocus disk
     fn defocusDiskSample(self: Camera) Point3 {
-        const p = Vec3.randomInUnitDisk(self.prng);
+        const p = Vec3.randomInUnitDisk(self.scene.prng);
         return self.center
             .add(self.defocusDiskU.mulScalar(p.x()))
             .add(self.defocusDiskV.mulScalar(p.y()));
@@ -228,7 +224,7 @@ pub const CameraBuilder = struct {
     image: Image,
 
     /// Configurable/buildable parameters
-    seed: ?u64 = null,
+    scene: ?Scene = null,
     samplesPerPixel: ?usize = defaultSamplesPerPixel, // Count of random samples for each pixel
     bounceMax: ?usize = defaultBounceMax, // Maximum number of ray bounces into scene
     center: ?Point3 = defaultCameraCenter, // Camera center
@@ -239,9 +235,14 @@ pub const CameraBuilder = struct {
     focusDist: ?f64 = defaultFocusDist, // Distance from camera lookFrom point to plane of perfect focus
 
     /// Generated from other parameters
-    prng: ?*DefaultPrng = null,
     viewport: ?Viewport = null,
     pixelSamplesScale: ?f64 = defaultPixelSamplesScale, // Color scale factor for a sum of pixel samples
+
+    /// Sets the scene to be rendered
+    pub fn setScene(self: *CameraBuilder, scene: Scene) *CameraBuilder {
+        self.scene = scene;
+        return self;
+    }
 
     /// Sets the focusDist. Must be set before creating the viewport.
     pub fn setFocusDist(self: *CameraBuilder, focusDist: f64) *CameraBuilder {
@@ -262,13 +263,6 @@ pub const CameraBuilder = struct {
         self.lookFrom = lookFrom;
         self.lookAt = lookAt;
         self.viewport = Viewport.init(self.image, vFov, self.focusDist.?);
-        return self;
-    }
-
-    /// Specify a known seed to use when creating the DefaultPrng to create
-    /// deterministic results.
-    pub fn setSeed(self: *CameraBuilder, seed: u64) *CameraBuilder {
-        self.seed = seed;
         return self;
     }
 
@@ -295,18 +289,8 @@ pub const CameraBuilder = struct {
         // Make sure we free the builder when done
         defer self.alloc.destroy(self);
 
-        const prngPtr = self.alloc.create(DefaultPrng) catch unreachable;
-        prngPtr.* = prng: {
-            if (self.seed) |seed| {
-                break :prng DefaultPrng.init(seed);
-            } else {
-                break :prng DefaultPrng.init(blk: {
-                    var seed: u64 = undefined;
-                    std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-                    break :blk seed;
-                });
-            }
-        };
+        // Create a blank scene if one doesn't exist
+        const scene = if (self.scene) |s| s else Scene.init(self.alloc, null);
 
         const w = self.lookFrom.?.sub(self.lookAt.?).unit();
         const u = self.vUp.?.cross(w).unit();
@@ -329,9 +313,8 @@ pub const CameraBuilder = struct {
         return .{
             .alloc = self.alloc,
             .image = self.image,
+            .scene = scene,
             .viewport = self.viewport.?,
-            .prng = prngPtr,
-            .seed = self.seed,
             .samplesPerPixel = self.samplesPerPixel.?,
             .pixelSamplesScale = self.pixelSamplesScale.?,
             .bounceMax = self.bounceMax.?,
@@ -408,12 +391,15 @@ test "CameraBuilder" {
     try std.testing.expectEqual(defaultLookAt, builder.lookAt);
     try std.testing.expectEqual(defaultFocusDist, builder.focusDist);
     try std.testing.expectEqualDeep(null, builder.viewport);
+    try std.testing.expectEqualDeep(null, builder.scene);
     try std.testing.expectEqual(defaultSamplesPerPixel, builder.samplesPerPixel);
     try std.testing.expectEqual(defaultPixelSamplesScale, builder.pixelSamplesScale);
     try std.testing.expectEqual(defaultBounceMax, builder.bounceMax);
     try std.testing.expectEqual(defaultVUp, builder.vUp);
-    try std.testing.expectEqual(null, builder.seed);
-    try std.testing.expectEqual(null, builder.prng);
+
+    const scene = Scene.init(std.testing.allocator, 0xabadcafe);
+    builder = builder.setScene(scene);
+    try std.testing.expectEqualDeep(scene, builder.scene);
 
     builder = builder.setViewport(defaultLookFrom, defaultLookAt, vFov);
     try std.testing.expectEqual(defaultCameraCenter, builder.center);
@@ -421,9 +407,6 @@ test "CameraBuilder" {
     try std.testing.expectEqual(defaultLookAt, builder.lookAt);
     try std.testing.expectEqual(defaultFocusDist, builder.focusDist);
     try std.testing.expectEqualDeep(Viewport.init(builder.image, vFov, defaultFocusDist), builder.viewport);
-
-    builder = builder.setSeed(0xabadcafe);
-    try std.testing.expectEqual(0xabadcafe, builder.seed);
 
     builder = builder.setFocusDist(defaultFocusDist);
     try std.testing.expectEqual(defaultFocusDist, builder.focusDist);
@@ -451,7 +434,8 @@ test "CameraBuilder" {
     try std.testing.expectEqual(1 / @as(f64, @floatFromInt(10)), camera.pixelSamplesScale);
     try std.testing.expectEqual(100, camera.bounceMax);
     try std.testing.expectEqual(defaultVUp, camera.vUp);
-    try std.testing.expectEqual(0xabadcafe, camera.seed);
+    try std.testing.expectEqualDeep(scene, camera.scene);
+    try std.testing.expectEqual(0xabadcafe, camera.scene.seed);
     try std.testing.expectEqualDeep(Viewport.init(camera.image, vFov, defaultFocusDist), camera.viewport);
     try std.testing.expectEqual(defaultCameraCenter, camera.center);
     try std.testing.expectEqual(defaultLookFrom, camera.lookFrom);
@@ -467,16 +451,9 @@ test "Camera" {
     const cameraVu = Vec3.init(4.0, 0, 0);
     const cameraVv = Vec3.init(0, -2.0, 0);
     const cameraUpperLeft = cameraCenter.sub(Vec3.init(0, 0, 2.0)).sub(cameraVu.divScalar(2)).sub(cameraVv.divScalar(2));
-
-    const prngPtr = try std.testing.allocator.create(DefaultPrng);
-    const prng = DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-        break :blk seed;
-    });
-    prngPtr.* = prng;
-
     const height = 2.0 * @tan(std.math.degreesToRadians(90) / 2.0);
+
+    const scene = Scene.init(std.testing.allocator, 0xabadcafe);
 
     const camera = Camera{
         .alloc = std.testing.allocator,
@@ -489,6 +466,7 @@ test "Camera" {
             .height = 2.0,
             .vFov = 90,
         },
+        .scene = scene,
         .center = Vec3.init(0, 0, 0),
         .du = cameraVu.divScalar(800),
         .dv = cameraVv.divScalar(400),
@@ -497,13 +475,11 @@ test "Camera" {
         .focusDist = defaultFocusDist,
         .samplesPerPixel = defaultSamplesPerPixel,
         .pixelSamplesScale = defaultPixelSamplesScale,
-        .prng = prngPtr,
     };
     defer camera.deinit();
 
     const init = Camera.init(std.testing.allocator, 400, (16.0 / 9.0))
         .setViewport(Point3.init(0, 0, 0), Point3.init(0, 0, -1), 90)
-        .setSeed(0xdeadbeef)
         .build();
     defer init.deinit();
 
@@ -513,6 +489,7 @@ test "Camera" {
     try std.testing.expectEqual(2.0, camera.image.aspectRatio());
     try std.testing.expectEqual(4.0, camera.viewport.width);
     try std.testing.expectEqual(2.0, camera.viewport.height);
+    try std.testing.expectEqual(0xabadcafe, camera.scene.seed);
     try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), camera.center);
     try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), camera.lookFrom);
     try std.testing.expectEqualDeep(Vec3.init(0, 0, -1), camera.lookAt);
@@ -526,7 +503,6 @@ test "Camera" {
     try std.testing.expectEqual(defaultVUp, camera.vUp);
     try std.testing.expectEqual(defaultSamplesPerPixel, camera.samplesPerPixel);
     try std.testing.expectEqual(defaultPixelSamplesScale, camera.pixelSamplesScale);
-    try std.testing.expectEqual(null, camera.seed);
 
     try std.testing.expectEqual(defaultFocusDist, init.focusDist);
     try std.testing.expectEqual(400, init.image.width);
@@ -548,116 +524,27 @@ test "Camera" {
     try std.testing.expectEqual(defaultVUp, init.vUp);
     try std.testing.expectEqual(defaultSamplesPerPixel, init.samplesPerPixel);
     try std.testing.expectEqual(defaultPixelSamplesScale, init.pixelSamplesScale);
-    try std.testing.expectEqual(0xdeadbeef, init.seed);
+    try std.testing.expectEqual(null, init.scene.seed);
 }
 
 test "Camera.render()" {
-    const Hittable = @import("hittable.zig").Hittable;
-    const prngPtr = try testPrng(0xdeadbeef);
-    defer std.testing.allocator.destroy(prngPtr);
-
-    // World
-    var world = HittableList.init(std.testing.allocator);
-    defer world.deinit();
-
-    // Materials and objects
-    // Ground
-    const matGround = Material.init(
-        .lambertian,
-        .{ .albedo = Color.init(0.5, 0.5, 0.5), .prng = prngPtr },
-    );
-    world.add(Hittable.init(.sphere, .{
-        .center = Point3.init(0, -1000, 0),
-        .radius = 1000,
-        .mat = matGround,
-    }));
-
-    // Generate random spheres and materials
-    for (0..22) |a| {
-        const xOffset: f64 = @as(f64, @floatFromInt(a)) - 11;
-        for (0..22) |b| {
-            const zOffset: f64 = @as(f64, @floatFromInt(b)) - 11;
-
-            const chooseMat = util.randomDouble(prngPtr);
-            const center = Point3.init(
-                xOffset + 0.9 * util.randomDouble(prngPtr),
-                0.2,
-                zOffset + 0.9 * util.randomDouble(prngPtr),
-            );
-
-            if (center.sub(Point3.init(4, 0.2, 0)).len() > 0.9) {
-                // 5% chance of glass
-                var sphereMaterial = Material.init(.dielectric, .{
-                    .refractionIndex = 1.5,
-                    .prng = prngPtr,
-                });
-
-                if (chooseMat < 0.8) {
-                    // 80% is diffuse material
-                    const albedo = Color.fromVec(Color3.random(prngPtr).mul(Color3.random(prngPtr)));
-                    sphereMaterial = Material.init(.lambertian, .{
-                        .albedo = albedo,
-                        .prng = prngPtr,
-                    });
-                } else if (chooseMat < 0.95) {
-                    // 15% metal
-                    const albedo = Color.fromVec(Color3.randomRange(0.5, 1, prngPtr));
-                    const fuzz = util.randomDoubleRange(0, 0.5, prngPtr);
-                    sphereMaterial = Material.init(.metal, .{
-                        .albedo = albedo,
-                        .fuzz = fuzz,
-                        .prng = prngPtr,
-                    });
-                }
-
-                world.add(Hittable.init(.sphere, .{
-                    .center = center,
-                    .radius = 0.2,
-                    .mat = sphereMaterial,
-                }));
-            }
-        }
-    }
-
-    const mat1 = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.5, .prng = prngPtr },
-    );
-    world.add(Hittable.init(
-        .sphere,
-        .{ .center = Point3.init(0, 1, 0), .radius = 1, .mat = mat1 },
-    ));
-
-    const mat2 = Material.init(
-        .lambertian,
-        .{ .albedo = Color.init(0.4, 0.2, 0.1), .prng = prngPtr },
-    );
-    world.add(Hittable.init(
-        .sphere,
-        .{ .center = Point3.init(-4, 1, 0), .radius = 1, .mat = mat2 },
-    ));
-
-    const mat3 = Material.init(
-        .metal,
-        .{ .albedo = Color.init(0.7, 0.6, 0.5), .fuzz = 0, .prng = prngPtr },
-    );
-    world.add(Hittable.init(
-        .sphere,
-        .{ .center = Point3.init(4, 1, 0), .radius = 1, .mat = mat3 },
-    ));
+    // Generate the random scene using this seed
+    var scene = Scene.init(std.testing.allocator, 0xdeadbeef);
+    scene.generateWorld();
 
     // Figure out aspect ratio, image width, and set a deterministic seed
     const aspectRatio = 16.0 / 9.0;
     var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
-        .setSeed(0xdeadbeef)
-        .setDefocusAngle(10.0)
-        .setFocusDist(3.4)
-        .setViewport(Point3.init(-2, 2, 1), Point3.init(0, 0, -1), 20)
+        .setScene(scene)
+        .setDefocusAngle(0.6)
+        .setFocusDist(10)
+        .setSamplesPerPixel(10)
+        .setViewport(Point3.init(13, 2, 3), Point3.init(0, 0, 0), 20)
         .build();
     defer camera.deinit();
 
     // Render and save the file
-    try camera.render(world);
+    try camera.render();
 
     const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/" ++ chapter ++ ".ppm", 5e5);
     defer std.testing.allocator.free(expected);
@@ -696,12 +583,4 @@ test "Camera.defocusDiskSample()" {
         try std.testing.expect(-1 <= sample.y() and sample.y() <= 1);
         try std.testing.expectEqual(0, sample.z());
     }
-}
-
-fn testPrng(seed: u64) !*DefaultPrng {
-    const prngPtr = try std.testing.allocator.create(DefaultPrng);
-    const prng = DefaultPrng.init(seed);
-    prngPtr.* = prng;
-
-    return prngPtr;
 }

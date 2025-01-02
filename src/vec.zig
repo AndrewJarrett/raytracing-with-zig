@@ -13,54 +13,54 @@ pub const Vec3 = packed struct {
         };
     }
 
-    pub fn zero() Vec3 {
+    pub inline fn zero() Vec3 {
         return .{
             .v = [_]f64{ 0, 0, 0 },
         };
     }
 
-    pub fn nearZero(self: Vec3) bool {
+    pub inline fn nearZero(self: Vec3) bool {
         const s: @Vector(3, f64) = @splat(1e-8);
         return @reduce(.And, self.v < s);
     }
 
-    pub fn x(self: Vec3) f64 {
+    pub inline fn x(self: Vec3) f64 {
         return self.v[0];
     }
 
-    pub fn y(self: Vec3) f64 {
+    pub inline fn y(self: Vec3) f64 {
         return self.v[1];
     }
 
-    pub fn z(self: Vec3) f64 {
+    pub inline fn z(self: Vec3) f64 {
         return self.v[2];
     }
 
-    pub fn neg(self: Vec3) Vec3 {
+    pub inline fn neg(self: Vec3) Vec3 {
         return .{ .v = -self.v };
     }
 
-    pub fn add(self: Vec3, other: Vec3) Vec3 {
+    pub inline fn add(self: Vec3, other: Vec3) Vec3 {
         return .{ .v = self.v + other.v };
     }
 
-    pub fn addScalar(self: Vec3, scalar: f64) Vec3 {
+    pub inline fn addScalar(self: Vec3, scalar: f64) Vec3 {
         return .{ .v = self.v + @as(@Vector(3, f64), @splat(scalar)) };
     }
 
-    pub fn sub(self: Vec3, other: Vec3) Vec3 {
+    pub inline fn sub(self: Vec3, other: Vec3) Vec3 {
         return .{ .v = self.v - other.v };
     }
 
-    pub fn mul(self: Vec3, other: Vec3) Vec3 {
+    pub inline fn mul(self: Vec3, other: Vec3) Vec3 {
         return .{ .v = self.v * other.v };
     }
 
-    pub fn mulScalar(self: Vec3, scalar: f64) Vec3 {
+    pub inline fn mulScalar(self: Vec3, scalar: f64) Vec3 {
         return .{ .v = self.v * @as(@Vector(3, f64), @splat(scalar)) };
     }
 
-    pub fn divScalar(self: Vec3, scalar: f64) Vec3 {
+    pub inline fn divScalar(self: Vec3, scalar: f64) Vec3 {
         if (scalar == 0) {
             @panic("Trying to divide by zero!");
         }
@@ -68,15 +68,15 @@ pub const Vec3 = packed struct {
         return .{ .v = self.v * @as(@Vector(3, f64), @splat(1 / scalar)) };
     }
 
-    pub fn len(self: Vec3) f64 {
+    pub inline fn len(self: Vec3) f64 {
         return @sqrt(self.lenSquared());
     }
 
-    pub fn lenSquared(self: Vec3) f64 {
+    pub inline fn lenSquared(self: Vec3) f64 {
         return @reduce(.Add, (self.v * self.v));
     }
 
-    pub fn random(prng: *DefaultPrng) Vec3 {
+    pub inline fn random(prng: *DefaultPrng) Vec3 {
         return Vec3.init(
             util.randomDouble(prng),
             util.randomDouble(prng),
@@ -84,7 +84,7 @@ pub const Vec3 = packed struct {
         );
     }
 
-    pub fn randomRange(min: f64, max: f64, prng: *DefaultPrng) Vec3 {
+    pub inline fn randomRange(min: f64, max: f64, prng: *DefaultPrng) Vec3 {
         return Vec3.init(
             util.randomDoubleRange(min, max, prng),
             util.randomDoubleRange(min, max, prng),
@@ -92,7 +92,7 @@ pub const Vec3 = packed struct {
         );
     }
 
-    pub fn randomUnitVec(prng: *DefaultPrng) Vec3 {
+    pub inline fn randomUnitVec(prng: *DefaultPrng) Vec3 {
         while (true) {
             const p = Vec3.randomRange(-1, 1, prng);
             const lenSq = p.lenSquared();
@@ -103,7 +103,7 @@ pub const Vec3 = packed struct {
         }
     }
 
-    pub fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
+    pub inline fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
         while (true) {
             const p = Vec3.init(
                 util.randomDoubleRange(-1, 1, prng),
@@ -114,7 +114,7 @@ pub const Vec3 = packed struct {
         }
     }
 
-    pub fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
+    pub inline fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
         var onUnitSphere = Vec3.randomUnitVec(prng);
         if (onUnitSphere.dot(normal) > 0.0) {
             return onUnitSphere;
@@ -123,22 +123,22 @@ pub const Vec3 = packed struct {
         }
     }
 
-    pub fn reflect(self: Vec3, n: Vec3) Vec3 {
+    pub inline fn reflect(self: Vec3, n: Vec3) Vec3 {
         return self.sub(n.mulScalar(self.dot(n) * 2));
     }
 
-    pub fn refract(self: Vec3, n: Vec3, etaiOverEtat: f64) Vec3 {
+    pub inline fn refract(self: Vec3, n: Vec3, etaiOverEtat: f64) Vec3 {
         const cosTheta: f64 = @min(self.neg().dot(n), 1);
         const rPerp = self.add(n.mulScalar(cosTheta)).mulScalar(etaiOverEtat);
         const rParallel = n.mulScalar(-@sqrt(@abs(1.0 - rPerp.lenSquared())));
         return rPerp.add(rParallel);
     }
 
-    pub fn dot(self: Vec3, other: Vec3) f64 {
+    pub inline fn dot(self: Vec3, other: Vec3) f64 {
         return @reduce(.Add, self.v * other.v);
     }
 
-    pub fn cross(self: Vec3, other: Vec3) Vec3 {
+    pub inline fn cross(self: Vec3, other: Vec3) Vec3 {
         return Vec3.init(
             self.v[1] * other.v[2] - self.v[2] * other.v[1],
             self.v[2] * other.v[0] - self.v[0] * other.v[2],
@@ -146,7 +146,7 @@ pub const Vec3 = packed struct {
         );
     }
 
-    pub fn unit(self: Vec3) Vec3 {
+    pub inline fn unit(self: Vec3) Vec3 {
         return self.divScalar(self.len());
     }
 
