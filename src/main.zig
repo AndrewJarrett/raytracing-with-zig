@@ -21,7 +21,9 @@ pub fn main() !void {
     scene.generateWorld();
 
     // Camera
-    const imgWidth = 1920;
+    const imgWidth = 3840; // 4k image
+    //const imgWidth = 1920; // FHD image
+    //const imgWidth = 1200; // Final render from book
     const aspectRatio = 16.0 / 9.0;
     const camera = Camera.init(allocator, imgWidth, aspectRatio)
         .setScene(scene)
