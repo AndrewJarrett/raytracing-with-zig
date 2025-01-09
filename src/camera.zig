@@ -2,6 +2,7 @@ const std = @import("std");
 const util = @import("util.zig");
 
 const Point3 = @import("vec.zig").Point3;
+const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
 const Ray = @import("ray.zig").Ray;
 const Color = @import("color.zig").Color;
@@ -14,8 +15,13 @@ const Scene = @import("Scene.zig");
 
 const DefaultPrng = std.rand.DefaultPrng;
 const Allocator = std.mem.Allocator;
-pub const chapter = "chapter14";
+const degToRad = std.math.degreesToRadians;
 const inf = std.math.inf(f64);
+
+pub const chapter = "chapter14";
+const white = Color3{ 1, 1, 1 };
+const blue = Color3{ 0.5, 0.7, 1 };
+const black = Color3{ 0, 0, 0 };
 
 const Image = struct {
     width: usize = 100,
@@ -23,7 +29,7 @@ const Image = struct {
 
     /// The preferred method of initialization is through the Camera struct and only
     /// needs to be provided with the width of the image and the aspectRatio. The height
-    /// will be calculated automatically based on the width of the image and the aspectRatio.
+    /// Interval.init(1e-3, inf)will be calculated automatically based on the width of the image and the aspectRatio.
     pub fn init(width: usize, ratio: f64) Image {
         const height: usize = @intFromFloat(@as(f64, @floatFromInt(width)) / ratio);
 
@@ -53,7 +59,7 @@ const Viewport = struct {
     vFov: f64,
 
     pub fn init(img: Image, vFov: f64, focusDist: f64) Viewport {
-        const theta = std.math.degreesToRadians(vFov);
+        const theta = degToRad(vFov);
         const h = @tan(theta / 2.0);
         const height = 2 * h * focusDist;
         const width = height * (@as(f64, @floatFromInt(img.width)) / @as(f64, @floatFromInt(img.height)));
@@ -122,14 +128,20 @@ pub const Camera = struct {
         for (0..ppm.height) |j| {
             std.log.info("\rScanlines remaining: {d} ", .{ppm.height - j});
             for (0..ppm.width) |i| {
-                var pixelColor = Color.init(0, 0, 0);
+                var pixelColor = black;
                 // Anti-aliasing sampling
                 for (0..self.samplesPerPixel) |_| {
+                    //const rayPtr = try self.alloc.create(Ray);
+                    //defer self.alloc.destroy(rayPtr);
+                    //rayPtr.* = self.getRay(i, j);
                     const ray = self.getRay(i, j);
-                    const color = self.rayColor(ray, 0, self.scene.world);
-                    pixelColor.pixel = pixelColor.pixel.add(color.pixel);
+                    //std.debug.print("ray: {s}\n", .{rayPtr});
+
+                    pixelColor += self.rayColor(ray);
+                    //std.debug.print("pixelColor: {any}\n", .{pixelColor});
                 }
-                const avgColor = Color.fromVec(pixelColor.pixel.mulScalar(self.pixelSamplesScale));
+                const avgColor = Color.fromVec(Vec.mulScalar(pixelColor, self.pixelSamplesScale));
+                //std.debug.print("avgColor: {any}\n", .{avgColor.toRgb()});
                 ppm.pixels[i + j * ppm.width] = avgColor;
             }
         }
@@ -139,40 +151,50 @@ pub const Camera = struct {
         try ppm.saveBinary("images/" ++ chapter ++ ".ppm");
     }
 
-    fn rayColor(self: Camera, ray: Ray, depth: usize, world: HittableList) Color {
-        if (depth >= self.bounceMax) return Color.init(0, 0, 0);
+    /// Non-recursive method for attenuating and bouncing the ray
+    fn rayColor(self: Camera, r: Ray) Color3 {
+        var bounces: usize = 0;
+        var returnColor = white;
+        var ray = r;
+        return color: {
+            while (bounces < self.bounceMax) : (bounces += 1) {
+                if (self.scene.world.hit(ray, self.scene.interval)) |rec| {
+                    if (rec.mat.scatter(ray, rec)) |s| {
+                        // Attenuate the return color when it scatters (starts at white)
+                        // and check for another bounce
+                        ray = s.scattered;
+                        returnColor *= s.attenuation;
+                        //std.debug.print("Scattered! color: {any}", .{returnColor});
+                        continue;
+                    } else {
+                        // If not scattered, then the light was absorbed, returning black
+                        break :color black;
+                    }
+                }
 
-        if (world.hit(ray, Interval.init(1e-3, inf))) |rec| {
-            // Update ray to randomly bounce in a new direction
-            if (rec.mat.scatter(ray, rec)) |s| {
-                return Color.fromVec(
-                    self.rayColor(s.scattered, depth + 1, world).pixel
-                        .mul(s.attenuation.pixel),
-                );
-            } else {
-                return Color.init(0, 0, 0);
+                // If we don't hit anything, we attenuate the light by the color of the "sky"
+                // which is a gradient from white to blue
+
+                // Translate the y value to be between 0-1.
+                const a = 0.5 * (Vec.unit(ray.dir)[1] + 1.0);
+
+                // Linear interpolate: existing color * (white * (1.0 - a) + blue * a) -> as y changes,
+                // gradient changes from blue to white
+                returnColor *= (Vec.mulScalar(white, 1.0 - a) + Vec.mulScalar(blue, a));
+                //std.debug.print("Exiting while - returnColor: {any}\n", .{returnColor});
+                break :color returnColor;
             }
-        }
 
-        // Translate the y value to be between 0-1.
-        const unitDir = ray.dir.unit();
-        const a = 0.5 * (unitDir.y() + 1.0);
-
-        // Linear interpolate: white * (1.0 - a) + blue * a -> as y changes,
-        // gradient changes from blue to white
-        const vec = Color.init(1.0, 1.0, 1.0).pixel.mulScalar(1.0 - a)
-            .add(Color.init(0.5, 0.7, 1.0).pixel.mulScalar(a));
-
-        return Color.fromVec(vec);
+            // Fall-back case if while loop doesn't run
+            break :color black;
+        };
     }
 
     /// Gets a Camera Ray that originates from the origin point and is directed
     /// towards a randomized sample point around the pixel location (i, j)
     fn getRay(self: Camera, i: usize, j: usize) Ray {
         const randomOffset = self.sampleSquare();
-        const pixelSample = self.pixel0
-            .add(self.du.mulScalar(@as(f64, @floatFromInt(i)) + randomOffset.x()))
-            .add(self.dv.mulScalar(@as(f64, @floatFromInt(j)) + randomOffset.y()));
+        const pixelSample = self.pixel0 + Vec.mulScalar(self.du, @as(f64, @floatFromInt(i)) + randomOffset[0]) + Vec.mulScalar(self.dv, @as(f64, @floatFromInt(j)) + randomOffset[1]);
 
         const rayOrigin = if (self.defocusAngle <= 0)
             self.center
@@ -181,43 +203,41 @@ pub const Camera = struct {
 
         return Ray.init(
             rayOrigin,
-            pixelSample.sub(rayOrigin),
+            pixelSample - rayOrigin,
         );
     }
 
     /// Return a vector to a random point in the [-.5,-.5] - [+.5,+.5] unit square
     fn sampleSquare(self: Camera) Vec3 {
-        return Vec3.init(
+        return Vec3{
             util.randomDouble(self.scene.prng) - 0.5,
             util.randomDouble(self.scene.prng) - 0.5,
             0,
-        );
+        };
     }
 
     /// Returns a random point in the camera defocus disk
     fn defocusDiskSample(self: Camera) Point3 {
-        const p = Vec3.randomInUnitDisk(self.scene.prng);
-        return self.center
-            .add(self.defocusDiskU.mulScalar(p.x()))
-            .add(self.defocusDiskV.mulScalar(p.y()));
+        const p = Vec.randomInUnitDisk(self.scene.prng);
+        return self.center + Vec.mulScalar(self.defocusDiskU, p[0]) + Vec.mulScalar(self.defocusDiskV, p[1]);
     }
 };
 
-const defaultCameraCenter = Point3.init(0, 0, 0);
+const defaultCameraCenter = Point3{ 0, 0, 0 };
 const defaultSamplesPerPixel = 100;
 const defaultPixelSamplesScale = 1.0 / @as(f64, @floatFromInt(defaultSamplesPerPixel));
 const defaultBounceMax = 50;
 const defaultLookFrom = defaultCameraCenter;
-const defaultLookAt = Point3.init(0, 0, -1);
-const defaultVUp = Vec3.init(0, 1, 0);
-const defaultW = defaultLookFrom.sub(defaultLookAt).unit();
-const defaultU = defaultVUp.cross(defaultW).unit();
-const defaultV = defaultW.cross(defaultU);
+const defaultLookAt = Point3{ 0, 0, -1 };
+const defaultVUp = Vec3{ 0, 1, 0 };
+const defaultW = defaultLookFrom - Vec.unit(defaultLookAt);
+const defaultU = Vec.unit(Vec.cross(defaultVUp, defaultW));
+const defaultV = Vec.cross(defaultW, defaultU);
 const defaultDefocusAngle = 0;
 const defaultFocusDist = 10;
-const defaultDefocusRadius = defaultFocusDist * @tan(std.math.degreesToRadians(defaultDefocusAngle / 2.0));
-const defaultDefocusDiskU = defaultU.mulScalar(defaultDefocusRadius);
-const defaultDefocusDiskV = defaultV.mulScalar(defaultDefocusRadius);
+const defaultDefocusRadius = defaultFocusDist * @tan(degToRad(defaultDefocusAngle / 2.0));
+const defaultDefocusDiskU = Vec.mulScalar(defaultU, defaultDefocusRadius);
+const defaultDefocusDiskV = Vec.mulScalar(defaultV, defaultDefocusRadius);
 pub const CameraBuilder = struct {
     /// Required
     alloc: Allocator,
@@ -292,23 +312,23 @@ pub const CameraBuilder = struct {
         // Create a blank scene if one doesn't exist
         const scene = if (self.scene) |s| s else Scene.init(self.alloc, null);
 
-        const w = self.lookFrom.?.sub(self.lookAt.?).unit();
-        const u = self.vUp.?.cross(w).unit();
-        const v = w.cross(u);
+        const w = Vec.unit(self.lookFrom.? - self.lookAt.?);
+        const u = Vec.unit(Vec.cross(self.vUp.?, w));
+        const v = Vec.cross(w, u);
 
-        const vu = u.mulScalar(self.viewport.?.width);
-        const vv = v.mulScalar(-self.viewport.?.height);
-        const du = vu.divScalar(@floatFromInt(self.image.width));
-        const dv = vv.divScalar(@floatFromInt(self.image.height));
+        const vu = Vec.mulScalar(u, self.viewport.?.width);
+        const vv = Vec.mulScalar(-v, self.viewport.?.height);
+        const du = Vec.divScalar(vu, @floatFromInt(self.image.width));
+        const dv = Vec.divScalar(vv, @floatFromInt(self.image.height));
 
-        const viewportUpperLeft = self.center.?
-            .sub(w.mulScalar(self.focusDist.?))
-            .sub(vu.divScalar(2))
-            .sub(vv.divScalar(2));
+        const viewportUpperLeft = self.center.? - Vec.mulScalar(w, self.focusDist.?) - Vec.divScalar(vu, 2) - Vec.divScalar(vv, 2);
 
-        const pixel0 = viewportUpperLeft.add(du.add(dv).mulScalar(0.5));
+        const pixel0 = viewportUpperLeft + Vec.mulScalar((du + dv), 0.5);
 
-        const defocusRadius = self.focusDist.? * @tan(std.math.degreesToRadians(self.defocusAngle.? / 2.0));
+        const defocusRadius = self.focusDist.? * @tan(degToRad(self.defocusAngle.? / 2.0));
+        //std.debug.print("--- builder --- Vec.len(lookAt): {any}; Vec.splat(Vec.len(lookAt)): {any}\n", .{ Vec.len(self.lookAt.?), Vec.splat(Vec.len(self.lookAt.?)) });
+
+        //std.debug.print("--- builder --- center: {any}; lookFrom: {any}; lookAt: {any}; w: {any}; u: {any}; v: {any}; viewportUpperLeft: {any}; pixel0: {any}; vu: {any}; vv: {any}; du: {any}, dv: {any}\n", .{ self.center, self.lookFrom, self.lookAt, w, u, v, viewportUpperLeft, pixel0, vu, vv, du, dv });
 
         return .{
             .alloc = self.alloc,
@@ -326,8 +346,8 @@ pub const CameraBuilder = struct {
             .v = v,
             .w = w,
             .focusDist = self.focusDist.?,
-            .defocusDiskU = u.mulScalar(defocusRadius),
-            .defocusDiskV = v.mulScalar(defocusRadius),
+            .defocusDiskU = Vec.mulScalar(u, defocusRadius),
+            .defocusDiskV = Vec.mulScalar(v, defocusRadius),
             .defocusAngle = self.defocusAngle.?,
             .du = du,
             .dv = dv,
@@ -363,7 +383,7 @@ test "Image" {
 
 test "Viewport" {
     const vFov = 90;
-    const height = 2.0 * @tan(std.math.degreesToRadians(vFov) / 2.0) * 2.0;
+    const height = 2.0 * @tan(degToRad(vFov) / 2.0) * 2.0;
     const vp = Viewport{ .width = 16.0, .height = height, .vFov = 90 };
     const aspectRatio = @as(f64, @floatFromInt(16)) / @as(f64, @floatFromInt(9));
     const imgRatio = @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225));
@@ -447,11 +467,11 @@ test "CameraBuilder" {
 }
 
 test "Camera" {
-    const cameraCenter = Vec3.init(0, 0, 0);
-    const cameraVu = Vec3.init(4.0, 0, 0);
-    const cameraVv = Vec3.init(0, -2.0, 0);
-    const cameraUpperLeft = cameraCenter.sub(Vec3.init(0, 0, 2.0)).sub(cameraVu.divScalar(2)).sub(cameraVv.divScalar(2));
-    const height = 2.0 * @tan(std.math.degreesToRadians(90) / 2.0);
+    const cameraCenter = Vec3{ 0, 0, 0 };
+    const cameraVu = Vec3{ 4.0, 0, 0 };
+    const cameraVv = Vec3{ 0, -2.0, 0 };
+    const cameraUpperLeft = cameraCenter - Vec3{ 0, 0, 2.0 } - Vec.divScalar(cameraVu, 2) - Vec.divScalar(cameraVv, 2);
+    const height = 2.0 * @tan(degToRad(90) / 2.0);
 
     const scene = Scene.init(std.testing.allocator, 0xabadcafe);
 
@@ -467,10 +487,10 @@ test "Camera" {
             .vFov = 90,
         },
         .scene = scene,
-        .center = Vec3.init(0, 0, 0),
-        .du = cameraVu.divScalar(800),
-        .dv = cameraVv.divScalar(400),
-        .pixel0 = cameraUpperLeft.add(cameraVu.divScalar(800).add(cameraVv.divScalar(400)).mulScalar(0.5)),
+        .center = Vec3{ 0, 0, 0 },
+        .du = Vec.divScalar(cameraVu, 800),
+        .dv = Vec.divScalar(cameraVv, 400),
+        .pixel0 = cameraUpperLeft + Vec.divScalar(cameraVu, 800) + Vec.mulScalar(Vec.divScalar(cameraVv, 400), 0.5),
         .defocusAngle = defaultDefocusAngle,
         .focusDist = defaultFocusDist,
         .samplesPerPixel = defaultSamplesPerPixel,
@@ -479,7 +499,7 @@ test "Camera" {
     defer camera.deinit();
 
     const init = Camera.init(std.testing.allocator, 400, (16.0 / 9.0))
-        .setViewport(Point3.init(0, 0, 0), Point3.init(0, 0, -1), 90)
+        .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer init.deinit();
 
@@ -490,12 +510,12 @@ test "Camera" {
     try std.testing.expectEqual(4.0, camera.viewport.width);
     try std.testing.expectEqual(2.0, camera.viewport.height);
     try std.testing.expectEqual(0xabadcafe, camera.scene.seed);
-    try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), camera.center);
-    try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), camera.lookFrom);
-    try std.testing.expectEqualDeep(Vec3.init(0, 0, -1), camera.lookAt);
-    try std.testing.expectEqualDeep(cameraVu.divScalar(800), camera.du);
-    try std.testing.expectEqualDeep(cameraVv.divScalar(400), camera.dv);
-    try std.testing.expectEqualDeep(Vec3.init(-1.9975, 0.9975, -2), camera.pixel0);
+    try std.testing.expectEqualDeep(Vec3{ 0, 0, 0 }, camera.center);
+    try std.testing.expectEqualDeep(Vec3{ 0, 0, 0 }, camera.lookFrom);
+    try std.testing.expectEqualDeep(Vec3{ 0, 0, -1 }, camera.lookAt);
+    try std.testing.expectEqualDeep(Vec.divScalar(cameraVu, 800), camera.du);
+    try std.testing.expectEqualDeep(Vec.divScalar(cameraVv, 400), camera.dv);
+    try std.testing.expectEqualDeep(Vec3{ -1.995, 0.9975, -2 }, camera.pixel0);
     try std.testing.expectEqual(defaultU, camera.u);
     try std.testing.expectEqual(defaultV, camera.v);
     try std.testing.expectEqual(defaultW, camera.w);
@@ -511,12 +531,12 @@ test "Camera" {
     try std.testing.expectEqual(height * init.focusDist * @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225)), init.viewport.width);
     try std.testing.expectEqual(height * init.focusDist, init.viewport.height);
     try std.testing.expectEqual(90, init.viewport.vFov);
-    try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), init.center);
-    try std.testing.expectEqualDeep(Vec3.init(0, 0, 0), init.lookFrom);
-    try std.testing.expectEqualDeep(Vec3.init(0, 0, -1), init.lookAt);
-    try std.testing.expectEqualDeep(Vec3.init(8.888888888888888e-2, 0e0, 0e0), init.du);
-    try std.testing.expectEqualDeep(Vec3.init(0, -8.888888888888888e-2, 0), init.dv);
-    try std.testing.expectEqualDeep(Vec3.init(-1.773333333333333e1, 9.955555555555554e0, -1e1), init.pixel0);
+    try std.testing.expectEqualDeep(Vec3{ 0, 0, 0 }, init.center);
+    try std.testing.expectEqualDeep(Vec3{ 0, 0, 0 }, init.lookFrom);
+    try std.testing.expectEqualDeep(Vec3{ 0, 0, -1 }, init.lookAt);
+    try std.testing.expectEqualDeep(Vec3{ 8.888888888888888e-2, 0e0, 0e0 }, init.du);
+    try std.testing.expectEqualDeep(Vec3{ 0, -8.888888888888888e-2, 0 }, init.dv);
+    try std.testing.expectEqualDeep(Vec3{ -1.773333333333333e1, 9.955555555555554e0, -1e1 }, init.pixel0);
     try std.testing.expectEqual(defaultU, init.u);
     try std.testing.expectEqual(defaultV, init.v);
     try std.testing.expectEqual(defaultW, init.w);
@@ -531,15 +551,25 @@ test "Camera.render()" {
     // Generate the random scene using this seed
     var scene = Scene.init(std.testing.allocator, 0xdeadbeef);
     scene.generateWorld();
+    //scene.generateChapter13();
 
     // Figure out aspect ratio, image width, and set a deterministic seed
+    //const aspectRatio = 16.0 / 9.0;
+    //var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
+    //    .setScene(scene)
+    //    .setDefocusAngle(10)
+    //    .setFocusDist(3.4)
+    //    .setViewport(Point3{ -2, 2, 1 }, Point3{ 0, 0, -1 }, 20)
+    //    .build();
+    //defer camera.deinit();
+
     const aspectRatio = 16.0 / 9.0;
     var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
         .setSamplesPerPixel(10)
-        .setViewport(Point3.init(13, 2, 3), Point3.init(0, 0, 0), 20)
+        .setViewport(Point3{ 13, 2, 3 }, Point3{ 0, 0, 0 }, 20)
         .build();
     defer camera.deinit();
 
@@ -557,30 +587,30 @@ test "Camera.render()" {
 
 test "Camera.sampleSquare()" {
     const camera = Camera.init(std.testing.allocator, 400, 1.0)
-        .setViewport(Point3.init(0, 0, 0), Point3.init(0, 0, -1), 90)
+        .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();
 
     const tests = 10;
     for (0..tests) |_| {
         const sample = camera.sampleSquare();
-        try std.testing.expect(-0.5 <= sample.x() and sample.x() <= 0.5);
-        try std.testing.expect(-0.5 <= sample.y() and sample.y() <= 0.5);
-        try std.testing.expectEqual(0, sample.z());
+        try std.testing.expect(-0.5 <= sample[0] and sample[0] <= 0.5);
+        try std.testing.expect(-0.5 <= sample[1] and sample[1] <= 0.5);
+        try std.testing.expectEqual(0, sample[2]);
     }
 }
 
 test "Camera.defocusDiskSample()" {
     const camera = Camera.init(std.testing.allocator, 400, 1.0)
-        .setViewport(Point3.init(0, 0, 0), Point3.init(0, 0, -1), 90)
+        .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();
 
     const tests = 10;
     for (0..tests) |_| {
         const sample = camera.defocusDiskSample();
-        try std.testing.expect(-1 <= sample.x() and sample.x() <= 1);
-        try std.testing.expect(-1 <= sample.y() and sample.y() <= 1);
-        try std.testing.expectEqual(0, sample.z());
+        try std.testing.expect(-1 <= sample[0] and sample[0] <= 1);
+        try std.testing.expect(-1 <= sample[1] and sample[1] <= 1);
+        try std.testing.expectEqual(0, sample[2]);
     }
 }

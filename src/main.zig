@@ -21,16 +21,18 @@ pub fn main() !void {
     scene.generateWorld();
 
     // Camera
-    const imgWidth = 3840; // 4k image
+    //const imgWidth = 3840; // 4k image
     //const imgWidth = 1920; // FHD image
     //const imgWidth = 1200; // Final render from book
+    const imgWidth = 400;
     const aspectRatio = 16.0 / 9.0;
     const camera = Camera.init(allocator, imgWidth, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
-        .setViewport(Point3.init(13, 2, 3), Point3.init(0, 0, 0), 20)
-        .setSamplesPerPixel(500)
+        .setViewport(Point3{ 13, 2, 3 }, Point3{ 0, 0, 0 }, 20)
+        .setSamplesPerPixel(10)
+    //.setSamplesPerPixel(500)
         .build();
     defer camera.deinit();
 

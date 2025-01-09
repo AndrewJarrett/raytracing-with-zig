@@ -5,7 +5,7 @@ const Interval = @import("interval.zig").Interval;
 pub const Color3 = Vec3;
 
 /// Holds the RGB values for a pixel's color
-pub const RGB = packed struct {
+pub const RGB = struct {
     r: u8,
     g: u8,
     b: u8,
@@ -20,19 +20,21 @@ pub const RGB = packed struct {
 
 /// Holds the color information for a specific pixel either
 /// as a u24 integer value, or a packed RGB struct of 3 u8's.
-pub const Color = packed struct {
+pub const Color = struct {
     pixel: Color3,
 
     pub fn init(r: f64, g: f64, b: f64) Color {
-        return .{ .pixel = Color3.init(r, g, b) };
+        return .{ .pixel = Color3{ r, g, b } };
     }
 
     pub fn fromValue(value: u24) Color {
-        return .{ .pixel = Color3.init(
-            @as(f64, @floatFromInt((value & 0xff0000) >> 16)) / 255.999,
-            @as(f64, @floatFromInt((value & 0x00ff00) >> 8)) / 255.999,
-            @as(f64, @floatFromInt(value & 0x0000ff)) / 255.999,
-        ) };
+        return .{
+            .pixel = .{
+                @as(f64, @floatFromInt((value & 0xff0000) >> 16)) / 255.999,
+                @as(f64, @floatFromInt((value & 0x00ff00) >> 8)) / 255.999,
+                @as(f64, @floatFromInt(value & 0x0000ff)) / 255.999,
+            },
+        };
     }
 
     pub fn toValue(self: Color) u24 {
@@ -45,16 +47,16 @@ pub const Color = packed struct {
     }
 
     pub fn toVec(self: Color) Vec3 {
-        return self.pixel;
+        return @as(Vec3, self.pixel);
     }
 
     pub fn fromRgb(rgb: RGB) Color {
         return .{
-            .pixel = Color3.init(
+            .pixel = .{
                 @as(f64, @floatFromInt(rgb.r)) / 255.999,
                 @as(f64, @floatFromInt(rgb.g)) / 255.999,
                 @as(f64, @floatFromInt(rgb.b)) / 255.999,
-            ),
+            },
         };
     }
 
@@ -62,13 +64,13 @@ pub const Color = packed struct {
         const interval = Interval.init(0.000, 0.999);
         return .{
             .r = @intFromFloat(256 * interval.clamp(
-                Color.linearToGamma(self.pixel.x()),
+                Color.linearToGamma(self.pixel[0]),
             )),
             .g = @intFromFloat(256 * interval.clamp(
-                Color.linearToGamma(self.pixel.y()),
+                Color.linearToGamma(self.pixel[1]),
             )),
             .b = @intFromFloat(256 * interval.clamp(
-                Color.linearToGamma(self.pixel.z()),
+                Color.linearToGamma(self.pixel[2]),
             )),
         };
     }
@@ -86,11 +88,11 @@ pub const Color = packed struct {
 };
 
 test "Color3 alias" {
-    const c = Color3.init(0.5, 0.5, 0.5);
+    const c = Color3{ 0.5, 0.5, 0.5 };
 
-    try std.testing.expectEqual(0.5, c.x());
-    try std.testing.expectEqual(0.5, c.y());
-    try std.testing.expectEqual(0.5, c.z());
+    try std.testing.expectEqual(0.5, c[0]);
+    try std.testing.expectEqual(0.5, c[1]);
+    try std.testing.expectEqual(0.5, c[2]);
 }
 
 test "rgb struct" {
@@ -112,12 +114,9 @@ test "rgb struct" {
 test "init()" {
     const c = Color.init(0.0, 0.5, 0.75);
 
-    try std.testing.expectEqual(0.0, c.pixel.x());
-    try std.testing.expectEqual(0.5, c.pixel.y());
-    try std.testing.expectEqual(0.75, c.pixel.z());
-
-    // Ensure the Color struct is packed
-    try std.testing.expectEqual(64 * 3, @bitSizeOf(Color));
+    try std.testing.expectEqual(0.0, c.pixel[0]);
+    try std.testing.expectEqual(0.5, c.pixel[1]);
+    try std.testing.expectEqual(0.75, c.pixel[2]);
 }
 
 test "fromValue()" {
@@ -136,14 +135,14 @@ test "toValue()" {
 }
 
 test "fromVec()" {
-    const expected = Color.init(3, 2, 1);
-    const actual = Color.fromVec(Color3.init(3, 2, 1));
+    const expected = Color{ .pixel = Color3{ 3, 2, 1 } };
+    const actual = Color.fromVec(Color3{ 3, 2, 1 });
     try std.testing.expectEqual(expected, actual);
 }
 
 test "toVec()" {
-    const expected = Vec3.init(3, 2, 1);
-    const actual = Color.fromVec(Color3.init(3, 2, 1)).toVec();
+    const expected = Vec3{ 3, 2, 1 };
+    const actual = Color.fromVec(Vec3{ 3, 2, 1 }).toVec();
     try std.testing.expectEqual(expected, actual);
 }
 
