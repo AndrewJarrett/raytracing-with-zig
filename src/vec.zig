@@ -28,18 +28,6 @@ pub const Vec = struct {
         return @reduce(.And, v < s);
     }
 
-    pub inline fn x(self: Vec) f64 {
-        return self.v[0];
-    }
-
-    pub inline fn y(self: Vec) f64 {
-        return self.v[1];
-    }
-
-    pub inline fn z(self: Vec) f64 {
-        return self.v[2];
-    }
-
     pub inline fn addScalar(v: Vec3, scalar: f64) Vec3 {
         return v + Vec.splat(scalar);
     }
@@ -171,14 +159,6 @@ test "nearZero()" {
     try std.testing.expect(Vec.nearZero(zeroes));
     try std.testing.expect(!Vec.nearZero(big));
     try std.testing.expect(Vec.nearZero(small));
-}
-
-test "x(), y(), and z()" {
-    const v = Vec.init(1.0, 0.0, 2.0);
-
-    try std.testing.expectEqual(1.0, v.x());
-    try std.testing.expectEqual(0.0, v.y());
-    try std.testing.expectEqual(2.0, v.z());
 }
 
 test "addScalar()" {

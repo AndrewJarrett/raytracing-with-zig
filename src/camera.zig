@@ -131,17 +131,10 @@ pub const Camera = struct {
                 var pixelColor = black;
                 // Anti-aliasing sampling
                 for (0..self.samplesPerPixel) |_| {
-                    //const rayPtr = try self.alloc.create(Ray);
-                    //defer self.alloc.destroy(rayPtr);
-                    //rayPtr.* = self.getRay(i, j);
                     const ray = self.getRay(i, j);
-                    //std.debug.print("ray: {s}\n", .{rayPtr});
-
                     pixelColor += self.rayColor(ray);
-                    //std.debug.print("pixelColor: {any}\n", .{pixelColor});
                 }
                 const avgColor = Color.fromVec(Vec.mulScalar(pixelColor, self.pixelSamplesScale));
-                //std.debug.print("avgColor: {any}\n", .{avgColor.toRgb()});
                 ppm.pixels[i + j * ppm.width] = avgColor;
             }
         }
@@ -164,7 +157,6 @@ pub const Camera = struct {
                         // and check for another bounce
                         ray = s.scattered;
                         returnColor *= s.attenuation;
-                        //std.debug.print("Scattered! color: {any}", .{returnColor});
                         continue;
                     } else {
                         // If not scattered, then the light was absorbed, returning black
@@ -178,14 +170,14 @@ pub const Camera = struct {
                 // Translate the y value to be between 0-1.
                 const a = 0.5 * (Vec.unit(ray.dir)[1] + 1.0);
 
-                // Linear interpolate: existing color * (white * (1.0 - a) + blue * a) -> as y changes,
-                // gradient changes from blue to white
+                // Linear interpolate:
+                // existing color * (white * (1.0 - a) + blue * a) -> as y changes,
+                // the gradient changes from blue to white
                 returnColor *= (Vec.mulScalar(white, 1.0 - a) + Vec.mulScalar(blue, a));
-                //std.debug.print("Exiting while - returnColor: {any}\n", .{returnColor});
                 break :color returnColor;
             }
 
-            // Fall-back case if while loop doesn't run
+            // Fall-back case if while loop doesn't break (too many bounces)
             break :color black;
         };
     }
@@ -326,9 +318,6 @@ pub const CameraBuilder = struct {
         const pixel0 = viewportUpperLeft + Vec.mulScalar((du + dv), 0.5);
 
         const defocusRadius = self.focusDist.? * @tan(degToRad(self.defocusAngle.? / 2.0));
-        //std.debug.print("--- builder --- Vec.len(lookAt): {any}; Vec.splat(Vec.len(lookAt)): {any}\n", .{ Vec.len(self.lookAt.?), Vec.splat(Vec.len(self.lookAt.?)) });
-
-        //std.debug.print("--- builder --- center: {any}; lookFrom: {any}; lookAt: {any}; w: {any}; u: {any}; v: {any}; viewportUpperLeft: {any}; pixel0: {any}; vu: {any}; vv: {any}; du: {any}, dv: {any}\n", .{ self.center, self.lookFrom, self.lookAt, w, u, v, viewportUpperLeft, pixel0, vu, vv, du, dv });
 
         return .{
             .alloc = self.alloc,
@@ -551,17 +540,6 @@ test "Camera.render()" {
     // Generate the random scene using this seed
     var scene = Scene.init(std.testing.allocator, 0xdeadbeef);
     scene.generateWorld();
-    //scene.generateChapter13();
-
-    // Figure out aspect ratio, image width, and set a deterministic seed
-    //const aspectRatio = 16.0 / 9.0;
-    //var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
-    //    .setScene(scene)
-    //    .setDefocusAngle(10)
-    //    .setFocusDist(3.4)
-    //    .setViewport(Point3{ -2, 2, 1 }, Point3{ 0, 0, -1 }, 20)
-    //    .build();
-    //defer camera.deinit();
 
     const aspectRatio = 16.0 / 9.0;
     var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
