@@ -1,19 +1,10 @@
 const std = @import("std");
 const util = @import("util.zig");
 
-const PPM = @import("ppm.zig").PPM;
-const Color = @import("color.zig").Color;
-const Color3 = @import("color.zig").Color3;
-const Ray = @import("ray.zig").Ray;
 const Point3 = @import("vec.zig").Point3;
-const Vec3 = @import("vec.zig").Vec3;
-const Sphere = @import("sphere.zig").Sphere;
-const Hittable = @import("hittable.zig").Hittable;
-const HittableList = @import("hittable.zig").HittableList;
-const Interval = @import("interval.zig").Interval;
 const Camera = @import("camera.zig").Camera;
 const chapter = @import("camera.zig").chapter;
-const Material = @import("material.zig").Material;
+const Scene = @import("Scene.zig");
 
 const Allocator = std.mem.Allocator;
 const DefaultPrng = std.rand.DefaultPrng;
@@ -25,91 +16,28 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    // Create the World's PRNG
-    const prngPtr = try allocator.create(DefaultPrng);
-    prngPtr.* = DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-        break :blk seed;
-    });
-
-    // Materials
-    const matGround = Material.init(
-        .lambertian,
-        .{ .albedo = Color.init(0.8, 0.8, 0), .prng = prngPtr },
-    );
-    const matCenter = Material.init(
-        .lambertian,
-        .{ .albedo = Color.init(0.1, 0.2, 0.5), .prng = prngPtr },
-    );
-    const matLeft = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.5, .prng = prngPtr },
-    );
-    const matBubble = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.0 / 1.5, .prng = prngPtr },
-    );
-    const matRight = Material.init(
-        .metal,
-        .{ .albedo = Color.init(0.8, 0.6, 0.2), .fuzz = 1.0, .prng = prngPtr },
-    );
-
-    // World
-    var world = HittableList.init(allocator);
-    world.add(Hittable.init(
-        .sphere,
-        .{
-            .center = Point3.init(0, -100.5, -1),
-            .radius = 100.0,
-            .mat = matGround,
-        },
-    ));
-    world.add(Hittable.init(
-        .sphere,
-        .{
-            .center = Point3.init(0, 0, -1.2),
-            .radius = 0.5,
-            .mat = matCenter,
-        },
-    ));
-    world.add(Hittable.init(
-        .sphere,
-        .{
-            .center = Point3.init(-1, 0, -1),
-            .radius = 0.5,
-            .mat = matLeft,
-        },
-    ));
-    world.add(Hittable.init(
-        .sphere,
-        .{
-            .center = Point3.init(-1, 0, -1),
-            .radius = 0.4,
-            .mat = matBubble,
-        },
-    ));
-    world.add(Hittable.init(
-        .sphere,
-        .{
-            .center = Point3.init(1, 0, -1),
-            .radius = 0.5,
-            .mat = matRight,
-        },
-    ));
+    // Generate the random scene
+    var scene = Scene.init(allocator, null);
+    scene.generateWorld();
 
     // Camera
+    //const imgWidth = 3840; // 4k image
+    //const imgWidth = 1920; // FHD image
+    //const imgWidth = 1200; // Final render from book
     const imgWidth = 400;
     const aspectRatio = 16.0 / 9.0;
     const camera = Camera.init(allocator, imgWidth, aspectRatio)
-        .setDefocusAngle(10)
-        .setFocusDist(3.4)
-        .setViewport(Point3.init(-2, 2, 1), Point3.init(0, 0, -1), 20)
+        .setScene(scene)
+        .setDefocusAngle(0.6)
+        .setFocusDist(10)
+        .setViewport(Point3{ 13, 2, 3 }, Point3{ 0, 0, 0 }, 20)
+        .setSamplesPerPixel(10)
+    //.setSamplesPerPixel(500)
         .build();
     defer camera.deinit();
 
     // Render
-    try camera.render(world);
+    try camera.render();
 }
 
 // Since we are randomly sampling the actual image, we can't compare. We will
