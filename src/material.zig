@@ -6,7 +6,7 @@ const Color3 = @import("color.zig").Color3;
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
 
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 
 pub const Scatter = struct {
     scattered: Ray,
