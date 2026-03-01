@@ -106,7 +106,7 @@ pub const Camera = struct {
     /// Uses the Builder pattern to construct a correct Camera. Do not set fields manually unless
     /// you are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio).
-    pub fn init(alloc: Allocator, width: usize, aspectRatio: f64) *CameraBuilder {
+    pub fn builder(alloc: Allocator, width: usize, aspectRatio: f64) *CameraBuilder {
         // Allocate space on the heap for the builder.
         const builderPtr = alloc.create(CameraBuilder) catch unreachable;
         builderPtr.* = CameraBuilder{
@@ -393,7 +393,7 @@ test "Viewport" {
 test "CameraBuilder" {
     const vFov = 90;
 
-    var builder = Camera.init(std.testing.allocator, 400, (16.0 / 9.0));
+    var builder = Camera.builder(std.testing.allocator, 400, (16.0 / 9.0));
 
     try std.testing.expectEqual(defaultCameraCenter, builder.center);
     try std.testing.expectEqual(defaultLookFrom, builder.lookFrom);
@@ -487,7 +487,7 @@ test "Camera" {
     };
     defer camera.deinit();
 
-    const init = Camera.init(std.testing.allocator, 400, (16.0 / 9.0))
+    const init = Camera.builder(std.testing.allocator, 400, (16.0 / 9.0))
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer init.deinit();
@@ -542,7 +542,7 @@ test "Camera.render()" {
     scene.generateWorld();
 
     const aspectRatio = 16.0 / 9.0;
-    var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
+    var camera = Camera.builder(std.testing.allocator, 400, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
@@ -564,7 +564,7 @@ test "Camera.render()" {
 }
 
 test "Camera.sampleSquare()" {
-    const camera = Camera.init(std.testing.allocator, 400, 1.0)
+    const camera = Camera.builder(std.testing.allocator, 400, 1.0)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();
@@ -579,7 +579,7 @@ test "Camera.sampleSquare()" {
 }
 
 test "Camera.defocusDiskSample()" {
-    const camera = Camera.init(std.testing.allocator, 400, 1.0)
+    const camera = Camera.builder(std.testing.allocator, 400, 1.0)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();

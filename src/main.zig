@@ -28,7 +28,7 @@ pub fn main() !void {
     const aspectRatio = 16.0 / 9.0;
     const samplesPerPixel = 500;
     //const samplesPerPixel = 10;
-    const camera = Camera.init(allocator, imgWidth, aspectRatio)
+    const camera = Camera.builder(allocator, imgWidth, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
