@@ -1,5 +1,6 @@
 const std = @import("std");
 const util = @import("util.zig");
+const config = @import("config");
 
 const Point3 = @import("vec.zig").Point3;
 const Vec = @import("vec.zig").Vec;
@@ -18,7 +19,6 @@ const Allocator = std.mem.Allocator;
 const degToRad = std.math.degreesToRadians;
 const inf = std.math.inf(f64);
 
-pub const chapter = "chapter14";
 const white = Color3{ 1, 1, 1 };
 const blue = Color3{ 0.5, 0.7, 1 };
 const black = Color3{ 0, 0, 0 };
@@ -141,7 +141,7 @@ pub const Camera = struct {
         std.log.info("\rDone.\n", .{});
 
         // Save the file
-        try ppm.saveBinary("images/" ++ chapter ++ ".ppm");
+        try ppm.saveBinary("images/" ++ config.fileName);
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
@@ -534,33 +534,6 @@ test "Camera" {
     try std.testing.expectEqual(defaultSamplesPerPixel, init.samplesPerPixel);
     try std.testing.expectEqual(defaultPixelSamplesScale, init.pixelSamplesScale);
     try std.testing.expectEqual(null, init.scene.seed);
-}
-
-test "Camera.render()" {
-    // Generate the random scene using this seed
-    var scene = Scene.init(std.testing.allocator, 0xdeadbeef);
-    scene.generateWorld();
-
-    const aspectRatio = 16.0 / 9.0;
-    var camera = Camera.builder(std.testing.allocator, 400, aspectRatio)
-        .setScene(scene)
-        .setDefocusAngle(0.6)
-        .setFocusDist(10)
-        .setSamplesPerPixel(10)
-        .setViewport(Point3{ 13, 2, 3 }, Point3{ 0, 0, 0 }, 20)
-        .build();
-    defer camera.deinit();
-
-    // Render and save the file
-    try camera.render();
-
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/" ++ chapter ++ ".ppm", 5e5);
-    defer std.testing.allocator.free(expected);
-
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/" ++ chapter ++ ".ppm", 5e5);
-    defer std.testing.allocator.free(actual);
-
-    try std.testing.expectEqualStrings(expected, actual);
 }
 
 test "Camera.sampleSquare()" {

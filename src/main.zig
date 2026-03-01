@@ -1,9 +1,9 @@
 const std = @import("std");
 const util = @import("util.zig");
+const config = @import("config");
 
 const Point3 = @import("vec.zig").Point3;
 const Camera = @import("camera.zig").Camera;
-const chapter = @import("camera.zig").chapter;
 const Scene = @import("Scene.zig");
 
 const Allocator = std.mem.Allocator;
@@ -17,23 +17,17 @@ pub fn main() !void {
     const allocator = arena.allocator();
 
     // Generate the random scene
-    var scene = Scene.init(allocator, null);
+    var scene = Scene.init(allocator, config.seed);
     scene.generateWorld();
 
     // Camera
-    const imgWidth = 3840; // 4k image
-    //const imgWidth = 1920; // FHD image
-    //const imgWidth = 1200; // Final render from book
-    //const imgWidth = 400;
     const aspectRatio = 16.0 / 9.0;
-    const samplesPerPixel = 500;
-    //const samplesPerPixel = 10;
-    const camera = Camera.builder(allocator, imgWidth, aspectRatio)
+    const camera = Camera.builder(allocator, config.imgWidth, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
         .setViewport(Point3{ 13, 2, 3 }, Point3{ 0, 0, 0 }, 20)
-        .setSamplesPerPixel(samplesPerPixel)
+        .setSamplesPerPixel(config.samplesPerPixel)
         .build();
     defer camera.deinit();
 
@@ -41,15 +35,21 @@ pub fn main() !void {
     try camera.render();
 }
 
-// Since we are randomly sampling the actual image, we can't compare. We will
-// actually compare the expected and actual image in the Camera render test
-// which will use a deterministic seed instead. This test will only ensure the
-// file is created.
+// Since we are passing in a seed for the test options, we have a deterministic 
+// image being built.  We will compare the expected and actual image since the
+// result will be the same every time.
 test "main" {
+    try std.testing.expect(config.imgWidth == 400);
+    try std.testing.expect(config.samplesPerPixel == 10);
+    try std.testing.expect(config.seed != null);
+
     try main();
 
-    const file = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/" ++ chapter ++ ".ppm", 5e5);
-    defer std.testing.allocator.free(file);
+    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/" ++ config.fileName, 5e5);
+    defer std.testing.allocator.free(expected);
 
-    try std.testing.expect(file.len > 0);
+    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/" ++ config.fileName, 5e5);
+    defer std.testing.allocator.free(actual);
+
+    try std.testing.expectEqualStrings(expected, actual);
 }
