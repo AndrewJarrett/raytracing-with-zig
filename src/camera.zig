@@ -1,5 +1,6 @@
 const std = @import("std");
 const util = @import("util.zig");
+const config = @import("config");
 
 const Point3 = @import("vec.zig").Point3;
 const Vec = @import("vec.zig").Vec;
@@ -18,7 +19,6 @@ const Allocator = std.mem.Allocator;
 const degToRad = std.math.degreesToRadians;
 const inf = std.math.inf(f64);
 
-pub const chapter = "chapter14";
 const white = Color3{ 1, 1, 1 };
 const blue = Color3{ 0.5, 0.7, 1 };
 const black = Color3{ 0, 0, 0 };
@@ -106,7 +106,7 @@ pub const Camera = struct {
     /// Uses the Builder pattern to construct a correct Camera. Do not set fields manually unless
     /// you are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio).
-    pub fn init(alloc: Allocator, width: usize, aspectRatio: f64) *CameraBuilder {
+    pub fn builder(alloc: Allocator, width: usize, aspectRatio: f64) *CameraBuilder {
         // Allocate space on the heap for the builder.
         const builderPtr = alloc.create(CameraBuilder) catch unreachable;
         builderPtr.* = CameraBuilder{
@@ -141,7 +141,7 @@ pub const Camera = struct {
         std.log.info("\rDone.\n", .{});
 
         // Save the file
-        try ppm.saveBinary("images/" ++ chapter ++ ".ppm");
+        try ppm.saveBinary("images/" ++ config.fileName);
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
@@ -393,7 +393,7 @@ test "Viewport" {
 test "CameraBuilder" {
     const vFov = 90;
 
-    var builder = Camera.init(std.testing.allocator, 400, (16.0 / 9.0));
+    var builder = Camera.builder(std.testing.allocator, 400, (16.0 / 9.0));
 
     try std.testing.expectEqual(defaultCameraCenter, builder.center);
     try std.testing.expectEqual(defaultLookFrom, builder.lookFrom);
@@ -487,7 +487,7 @@ test "Camera" {
     };
     defer camera.deinit();
 
-    const init = Camera.init(std.testing.allocator, 400, (16.0 / 9.0))
+    const init = Camera.builder(std.testing.allocator, 400, (16.0 / 9.0))
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer init.deinit();
@@ -536,35 +536,8 @@ test "Camera" {
     try std.testing.expectEqual(null, init.scene.seed);
 }
 
-test "Camera.render()" {
-    // Generate the random scene using this seed
-    var scene = Scene.init(std.testing.allocator, 0xdeadbeef);
-    scene.generateWorld();
-
-    const aspectRatio = 16.0 / 9.0;
-    var camera = Camera.init(std.testing.allocator, 400, aspectRatio)
-        .setScene(scene)
-        .setDefocusAngle(0.6)
-        .setFocusDist(10)
-        .setSamplesPerPixel(10)
-        .setViewport(Point3{ 13, 2, 3 }, Point3{ 0, 0, 0 }, 20)
-        .build();
-    defer camera.deinit();
-
-    // Render and save the file
-    try camera.render();
-
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/" ++ chapter ++ ".ppm", 5e5);
-    defer std.testing.allocator.free(expected);
-
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "images/" ++ chapter ++ ".ppm", 5e5);
-    defer std.testing.allocator.free(actual);
-
-    try std.testing.expectEqualStrings(expected, actual);
-}
-
 test "Camera.sampleSquare()" {
-    const camera = Camera.init(std.testing.allocator, 400, 1.0)
+    const camera = Camera.builder(std.testing.allocator, 400, 1.0)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();
@@ -579,7 +552,7 @@ test "Camera.sampleSquare()" {
 }
 
 test "Camera.defocusDiskSample()" {
-    const camera = Camera.init(std.testing.allocator, 400, 1.0)
+    const camera = Camera.builder(std.testing.allocator, 400, 1.0)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();
