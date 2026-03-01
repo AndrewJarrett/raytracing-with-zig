@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 
 pub const pi = std.math.pi;
 

@@ -7,7 +7,7 @@ const Camera = @import("camera.zig").Camera;
 const Scene = @import("Scene.zig");
 
 const Allocator = std.mem.Allocator;
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 
 const inf = std.math.inf(f64);
 

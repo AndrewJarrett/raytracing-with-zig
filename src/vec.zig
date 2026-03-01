@@ -1,7 +1,7 @@
 const std = @import("std");
 const util = @import("util.zig");
 
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 pub const Vec3 = @Vector(3, f64);
 pub const Point3 = Vec3;
 

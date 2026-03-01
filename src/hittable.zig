@@ -9,7 +9,7 @@ const Color3 = @import("color.zig").Color3;
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 
 pub const HitRecord = struct {
     point: Point3,

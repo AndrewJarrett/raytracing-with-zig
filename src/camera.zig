@@ -14,7 +14,7 @@ const PPM = @import("ppm.zig").PPM;
 const Material = @import("material.zig").Material;
 const Scene = @import("Scene.zig");
 
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 const Allocator = std.mem.Allocator;
 const degToRad = std.math.degreesToRadians;
 const inf = std.math.inf(f64);

@@ -8,7 +8,7 @@ const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
 const Color3 = @import("color.zig").Color3;
 
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 
 pub const Sphere = struct {
     center: Point3,

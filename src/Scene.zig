@@ -11,7 +11,7 @@ const Interval = @import("interval.zig").Interval;
 const inf = std.math.inf(f64);
 
 const Allocator = std.mem.Allocator;
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 
 const Self = @This();
 alloc: Allocator,
