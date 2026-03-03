@@ -35,7 +35,7 @@ pub fn main() !void {
     try camera.render();
 }
 
-// Since we are passing in a seed for the test options, we have a deterministic 
+// Since we are passing in a seed for the test options, we have a deterministic
 // image being built.  We will compare the expected and actual image since the
 // result will be the same every time.
 test "main" {

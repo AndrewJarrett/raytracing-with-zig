@@ -12,12 +12,12 @@ pub fn build(b: *std.Build) void {
     //});
 
     //b.installArtifact(lib);
-    
+
     const imgWidth = b.option(usize, "imgWidth", "width of the image in pixels") orelse 3840;
     const samplesPerPixel = b.option(usize, "samplesPerPixel", "samples per pixel to use") orelse 500;
     const fileName = b.option([]const u8, "fileName", "name of the file to save") orelse "chapter14.ppm";
     const seed = b.option(u64, "seed", "an optional random seed to use for determistic results") orelse null;
-    
+
     const buildOptions = b.addOptions();
     buildOptions.addOption(usize, "imgWidth", imgWidth);
     buildOptions.addOption(usize, "samplesPerPixel", samplesPerPixel);
