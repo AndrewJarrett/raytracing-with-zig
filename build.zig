@@ -12,12 +12,12 @@ pub fn build(b: *std.Build) void {
     //});
 
     //b.installArtifact(lib);
-    
+
     const imgWidth = b.option(usize, "imgWidth", "width of the image in pixels") orelse 3840;
     const samplesPerPixel = b.option(usize, "samplesPerPixel", "samples per pixel to use") orelse 500;
     const fileName = b.option([]const u8, "fileName", "name of the file to save") orelse "chapter14.ppm";
     const seed = b.option(u64, "seed", "an optional random seed to use for determistic results") orelse null;
-    
+
     const buildOptions = b.addOptions();
     buildOptions.addOption(usize, "imgWidth", imgWidth);
     buildOptions.addOption(usize, "samplesPerPixel", samplesPerPixel);
@@ -26,9 +26,11 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "raytracing-with-zig",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = std.Build.Module.create(b, .{ 
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
     exe.root_module.addOptions("config", buildOptions);
@@ -54,9 +56,11 @@ pub fn build(b: *std.Build) void {
     //const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = std.Build.Module.create(b, .{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        })
     });
 
     const testOptions = b.addOptions();

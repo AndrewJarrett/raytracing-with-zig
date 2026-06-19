@@ -22,7 +22,7 @@ pub fn main() !void {
 
     // Camera
     const aspectRatio = 16.0 / 9.0;
-    const camera = Camera.builder(allocator, config.imgWidth, aspectRatio)
+    var camera = Camera.builder(allocator, config.imgWidth, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
@@ -35,7 +35,7 @@ pub fn main() !void {
     try camera.render();
 }
 
-// Since we are passing in a seed for the test options, we have a deterministic 
+// Since we are passing in a seed for the test options, we have a deterministic
 // image being built.  We will compare the expected and actual image since the
 // result will be the same every time.
 test "main" {

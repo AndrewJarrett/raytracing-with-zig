@@ -116,7 +116,7 @@ pub const Camera = struct {
         return builderPtr;
     }
 
-    pub fn deinit(self: Camera) void {
+    pub fn deinit(self: *Camera) void {
         self.scene.deinit();
     }
 
@@ -301,9 +301,6 @@ pub const CameraBuilder = struct {
         // Make sure we free the builder when done
         defer self.alloc.destroy(self);
 
-        // Create a blank scene if one doesn't exist
-        const scene = if (self.scene) |s| s else Scene.init(self.alloc, null);
-
         const w = Vec.unit(self.lookFrom.? - self.lookAt.?);
         const u = Vec.unit(Vec.cross(self.vUp.?, w));
         const v = Vec.cross(w, u);
@@ -315,14 +312,12 @@ pub const CameraBuilder = struct {
 
         const viewportUpperLeft = self.center.? - Vec.mulScalar(w, self.focusDist.?) - Vec.divScalar(vu, 2) - Vec.divScalar(vv, 2);
 
-        const pixel0 = viewportUpperLeft + Vec.mulScalar((du + dv), 0.5);
-
         const defocusRadius = self.focusDist.? * @tan(degToRad(self.defocusAngle.? / 2.0));
 
         return .{
             .alloc = self.alloc,
             .image = self.image,
-            .scene = scene,
+            .scene = if (self.scene) |s| s else Scene.init(self.alloc, null),
             .viewport = self.viewport.?,
             .samplesPerPixel = self.samplesPerPixel.?,
             .pixelSamplesScale = self.pixelSamplesScale.?,
@@ -340,7 +335,7 @@ pub const CameraBuilder = struct {
             .defocusAngle = self.defocusAngle.?,
             .du = du,
             .dv = dv,
-            .pixel0 = pixel0,
+            .pixel0 = viewportUpperLeft + Vec.mulScalar((du + dv), 0.5),
         };
     }
 };
