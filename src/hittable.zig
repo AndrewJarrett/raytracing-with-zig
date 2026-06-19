@@ -43,22 +43,22 @@ pub const Hittable = union(HittableType) {
 pub const HittableList = struct {
     objects: ArrayList(Hittable),
 
-    pub fn init(allocator: Allocator) HittableList {
+    pub fn init() HittableList {
         return .{
-            .objects = ArrayList(Hittable).init(allocator),
+            .objects = .empty,
         };
     }
 
-    pub fn deinit(self: HittableList) void {
-        self.objects.deinit();
+    pub fn deinit(self: *HittableList, alloc: Allocator) void {
+        self.objects.deinit(alloc);
     }
 
-    pub fn clear(self: *HittableList) void {
-        self.objects.clearAndFree();
+    pub fn clear(self: *HittableList, alloc: Allocator) void {
+        self.objects.clearAndFree(alloc);
     }
 
-    pub fn add(self: *HittableList, object: Hittable) void {
-        self.objects.append(object) catch unreachable;
+    pub fn add(self: *HittableList, alloc: Allocator, object: Hittable) void {
+        self.objects.append(alloc, object) catch unreachable;
     }
 
     pub fn hit(self: HittableList, ray: Ray, t: Interval) ?HitRecord {

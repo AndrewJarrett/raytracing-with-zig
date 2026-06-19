@@ -22,7 +22,7 @@ pub fn main() !void {
 
     // Camera
     const aspectRatio = 16.0 / 9.0;
-    const camera = Camera.builder(allocator, config.imgWidth, aspectRatio)
+    var camera = Camera.builder(allocator, config.imgWidth, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)

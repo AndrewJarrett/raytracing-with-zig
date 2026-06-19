@@ -21,9 +21,6 @@ prng: *DefaultPrng,
 interval: Interval = Interval.init(1e-3, inf), // Default - edit field directly if needed
 
 pub fn init(allocator: Allocator, seed: ?u64) Self {
-    // Create an empty world
-    const world = HittableList.init(allocator);
-
     // Create a DefaultPrng using the optional seed if provided.
     // The pointer will be freed in the deinit method.
     const prngPtr = allocator.create(DefaultPrng) catch unreachable;
@@ -39,7 +36,7 @@ pub fn init(allocator: Allocator, seed: ?u64) Self {
 
     return .{
         .alloc = allocator,
-        .world = world,
+        .world = HittableList.init(),
         .seed = seed,
         .prng = prngPtr,
     };
@@ -52,7 +49,7 @@ pub fn generateWorld(self: *Self) void {
         .lambertian,
         .{ .albedo = Color3{ 0.5, 0.5, 0.5 }, .prng = self.prng },
     );
-    self.world.add(Hittable.init(.sphere, .{
+    self.world.add(self.alloc, Hittable.init(.sphere, .{
         .center = Point3{ 0, -1000, 0 },
         .radius = 1000,
         .mat = matGround,
@@ -96,7 +93,7 @@ pub fn generateWorld(self: *Self) void {
                     });
                 }
 
-                self.world.add(Hittable.init(.sphere, .{
+                self.world.add(self.alloc, Hittable.init(.sphere, .{
                     .center = center,
                     .radius = 0.2,
                     .mat = sphereMaterial,
@@ -109,7 +106,7 @@ pub fn generateWorld(self: *Self) void {
         .dielectric,
         .{ .refractionIndex = 1.5, .prng = self.prng },
     );
-    self.world.add(Hittable.init(
+    self.world.add(self.alloc, Hittable.init(
         .sphere,
         .{ .center = Point3{ 0, 1, 0 }, .radius = 1, .mat = mat1 },
     ));
@@ -118,7 +115,7 @@ pub fn generateWorld(self: *Self) void {
         .lambertian,
         .{ .albedo = Color3{ 0.4, 0.2, 0.1 }, .prng = self.prng },
     );
-    self.world.add(Hittable.init(
+    self.world.add(self.alloc, Hittable.init(
         .sphere,
         .{ .center = Point3{ -4, 1, 0 }, .radius = 1, .mat = mat2 },
     ));
@@ -127,7 +124,7 @@ pub fn generateWorld(self: *Self) void {
         .metal,
         .{ .albedo = Color3{ 0.7, 0.6, 0.5 }, .fuzz = 0, .prng = self.prng },
     );
-    self.world.add(Hittable.init(
+    self.world.add(self.alloc, Hittable.init(
         .sphere,
         .{ .center = Point3{ 4, 1, 0 }, .radius = 1, .mat = mat3 },
     ));
@@ -138,7 +135,7 @@ pub fn generateChapter13(self: *Self) void {
         .lambertian,
         .{ .albedo = Color3{ 0.8, 0.8, 0.0 }, .prng = self.prng },
     );
-    self.world.add(Hittable.init(.sphere, .{
+    self.world.add(self.alloc, Hittable.init(.sphere, .{
         .center = Point3{ 0, -100.5, -1 },
         .radius = 100,
         .mat = matGround,
@@ -148,7 +145,7 @@ pub fn generateChapter13(self: *Self) void {
         .lambertian,
         .{ .albedo = Color3{ 0.1, 0.2, 0.5 }, .prng = self.prng },
     );
-    self.world.add(Hittable.init(
+    self.world.add(self.alloc, Hittable.init(
         .sphere,
         .{ .center = Point3{ 0, 0, -1.2 }, .radius = 0.5, .mat = matCenter },
     ));
@@ -157,7 +154,7 @@ pub fn generateChapter13(self: *Self) void {
         .dielectric,
         .{ .refractionIndex = 1.5, .prng = self.prng },
     );
-    self.world.add(Hittable.init(
+    self.world.add(self.alloc, Hittable.init(
         .sphere,
         .{ .center = Point3{ -1, 0, -1 }, .radius = 0.5, .mat = matLeft },
     ));
@@ -166,7 +163,7 @@ pub fn generateChapter13(self: *Self) void {
         .dielectric,
         .{ .refractionIndex = 1.0 / 1.5, .prng = self.prng },
     );
-    self.world.add(Hittable.init(
+    self.world.add(self.alloc, Hittable.init(
         .sphere,
         .{ .center = Point3{ -1, 0, -1 }, .radius = 0.4, .mat = matBubble },
     ));
@@ -175,14 +172,14 @@ pub fn generateChapter13(self: *Self) void {
         .metal,
         .{ .albedo = Color3{ 0.8, 0.6, 0.2 }, .fuzz = 1, .prng = self.prng },
     );
-    self.world.add(Hittable.init(
+    self.world.add(self.alloc, Hittable.init(
         .sphere,
         .{ .center = Point3{ 1, 0, -1 }, .radius = 0.5, .mat = matRight },
     ));
 }
 
-pub fn deinit(self: Self) void {
-    self.world.deinit();
+pub fn deinit(self: *Self) void {
+    self.world.deinit(self.alloc);
     self.alloc.destroy(self.prng);
 }
 
