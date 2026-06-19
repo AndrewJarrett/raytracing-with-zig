@@ -26,8 +26,9 @@ pub const PPM = struct {
         var file = try std.fs.cwd().createFile(filename, .{});
         defer file.close();
 
-        var bw = std.io.bufferedWriter(file.writer());
-        const writer = bw.writer();
+        var buf: [2048]u8 = undefined;
+        var fileWriter = file.writer(&buf);
+        const writer: *std.Io.Writer = &fileWriter.interface;
 
         _ = try writer.print("P3\n{d} {d}\n255\n", .{ self.width, self.height });
 
@@ -35,7 +36,7 @@ pub const PPM = struct {
             _ = try writer.print("{s}\n", .{p});
         }
 
-        try bw.flush();
+        try writer.flush();
     }
 
     // Saves the PPM in binary format
@@ -43,8 +44,9 @@ pub const PPM = struct {
         var file = try std.fs.cwd().createFile(filename, .{});
         defer file.close();
 
-        var bw = std.io.bufferedWriter(file.writer());
-        const writer = bw.writer();
+        var buf: [2048]u8 = undefined;
+        var fileWriter = file.writer(&buf);
+        const writer: *std.Io.Writer = &fileWriter.interface;
 
         _ = try writer.print("P6\n{d} {d}\n255\n", .{ self.width, self.height });
 
@@ -56,7 +58,7 @@ pub const PPM = struct {
         }
         _ = try writer.print("\n", .{});
 
-        try bw.flush();
+        try writer.flush();
     }
 };
 
