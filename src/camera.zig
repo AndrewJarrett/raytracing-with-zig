@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = std.builtin;
 const DefaultPrng = std.Random.DefaultPrng;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -84,6 +85,7 @@ const Viewport = struct {
 pub const Camera = struct {
     alloc: Allocator,
     io: Io,
+    prng: *DefaultPrng,
     image: Image,
     viewport: Viewport,
     scene: Scene,
@@ -115,6 +117,7 @@ pub const Camera = struct {
         builderPtr.* = CameraBuilder{
             .alloc = alloc,
             .io = io,
+            .prng = prng,
             .image = Image.init(width, aspectRatio),
         };
         return builderPtr;
@@ -206,15 +209,15 @@ pub const Camera = struct {
     /// Return a vector to a random point in the [-.5,-.5] - [+.5,+.5] unit square
     fn sampleSquare(self: Camera) Vec3 {
         return Vec3{
-            util.randomDouble(self.scene.prng) - 0.5,
-            util.randomDouble(self.scene.prng) - 0.5,
+            util.randomDouble(self.prng) - 0.5,
+            util.randomDouble(self.prng) - 0.5,
             0,
         };
     }
 
     /// Returns a random point in the camera defocus disk
     fn defocusDiskSample(self: Camera) Point3 {
-        const p = Vec.randomInUnitDisk(self.scene.prng);
+        const p = Vec.randomInUnitDisk(self.prng);
         return self.center + Vec.mulScalar(self.defocusDiskU, p[0]) + Vec.mulScalar(self.defocusDiskV, p[1]);
     }
 };
@@ -237,6 +240,8 @@ const defaultDefocusDiskV = Vec.mulScalar(defaultV, defaultDefocusRadius);
 pub const CameraBuilder = struct {
     /// Required
     alloc: Allocator,
+    io: Io,
+    prng: *DefaultPrng,
     image: Image,
 
     /// Configurable/buildable parameters
@@ -321,8 +326,9 @@ pub const CameraBuilder = struct {
         return .{
             .alloc = self.alloc,
             .io = self.io,
+            .prng = self.prng,
             .image = self.image,
-            .scene = if (self.scene) |s| s else Scene.init(self.alloc, null),
+            .scene = if (self.scene) |s| s else Scene.init(self.alloc),
             .viewport = self.viewport.?,
             .samplesPerPixel = self.samplesPerPixel.?,
             .pixelSamplesScale = self.pixelSamplesScale.?,
@@ -564,4 +570,18 @@ test "Camera.defocusDiskSample()" {
         try std.testing.expect(-1 <= sample[1] and sample[1] <= 1);
         try std.testing.expectEqual(0, sample[2]);
     }
+}
+
+// Test helper to create a Prng. Don't deallocate...
+fn testPrng() *DefaultPrng {
+    const io = if (builtin.is_test) std.testing.io else @compileError("not testing");
+    const allocator = if (builtin.is_test) std.testing.allocator else @compileError("not testing");
+
+    const prng: *DefaultPrng = allocator.create(DefaultPrng) catch unreachable;
+    prng.* = DefaultPrng.init(blk: {
+        var seed: u64 = undefined;
+        io.random(std.mem.asBytes(&seed));
+        break :blk seed;
+    });
+    return prng;
 }

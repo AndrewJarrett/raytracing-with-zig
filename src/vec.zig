@@ -198,7 +198,7 @@ test "lenSquared()" {
 test "random()" {
     var prng = DefaultPrng.init(blk: {
         var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        std.testing.io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
 
@@ -221,8 +221,8 @@ test "random()" {
 
 test "randomRange()" {
     var prng = DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        var seed: u64  = undefined;
+        std.testing.io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
 

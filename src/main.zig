@@ -19,9 +19,23 @@ pub fn main(init: std.process.Init) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    // Create a DefaultPrng using the optional seed if provided.
+    const prng: *DefaultPrng = allocator.create(DefaultPrng) catch unreachable;
+    defer allocator.destroy(prng);
+    prng.* = DefaultPrng.init(blk: {
+        if (config.seed) |s| {
+            break :blk s;
+        } else {
+            var seed: u64 = undefined;
+            io.random(std.mem.asBytes(&seed));
+            break :blk seed;
+        }
+    });
+
     // Generate the random scene
-    var scene = Scene.init(allocator, config.seed);
-    scene.generateWorld();
+    var scene = Scene.init(allocator);
+    defer scene.deinit();
+    scene.generateWorld(prng);
 
     // Camera
     const aspectRatio = 16.0 / 9.0;
