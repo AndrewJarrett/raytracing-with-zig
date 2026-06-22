@@ -8,10 +8,13 @@ const Scene = @import("Scene.zig");
 
 const Allocator = std.mem.Allocator;
 const DefaultPrng = std.Random.DefaultPrng;
+const Io = std.Io;
 
 const inf = std.math.inf(f64);
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -22,7 +25,7 @@ pub fn main() !void {
 
     // Camera
     const aspectRatio = 16.0 / 9.0;
-    var camera = Camera.builder(allocator, config.imgWidth, aspectRatio)
+    var camera = Camera.builder(allocator, io, prng, config.imgWidth, aspectRatio)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)

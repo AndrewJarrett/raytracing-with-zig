@@ -1,22 +1,24 @@
 const std = @import("std");
-const util = @import("util.zig");
+const DefaultPrng = std.Random.DefaultPrng;
+const Allocator = std.mem.Allocator;
+const Io = std.Io;
+const degToRad = std.math.degreesToRadians;
+
 const config = @import("config");
 
-const Point3 = @import("vec.zig").Point3;
-const Vec = @import("vec.zig").Vec;
-const Vec3 = @import("vec.zig").Vec3;
-const Ray = @import("ray.zig").Ray;
 const Color = @import("color.zig").Color;
 const Color3 = @import("color.zig").Color3;
 const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
-const PPM = @import("ppm.zig").PPM;
 const Material = @import("material.zig").Material;
+const Point3 = @import("vec.zig").Point3;
+const PPM = @import("ppm.zig").PPM;
+const Ray = @import("ray.zig").Ray;
 const Scene = @import("Scene.zig");
+const util = @import("util.zig");
+const Vec = @import("vec.zig").Vec;
+const Vec3 = @import("vec.zig").Vec3;
 
-const DefaultPrng = std.Random.DefaultPrng;
-const Allocator = std.mem.Allocator;
-const degToRad = std.math.degreesToRadians;
 const inf = std.math.inf(f64);
 
 const white = Color3{ 1, 1, 1 };
@@ -81,6 +83,7 @@ const Viewport = struct {
 
 pub const Camera = struct {
     alloc: Allocator,
+    io: Io,
     image: Image,
     viewport: Viewport,
     scene: Scene,
@@ -106,11 +109,12 @@ pub const Camera = struct {
     /// Uses the Builder pattern to construct a correct Camera. Do not set fields manually unless
     /// you are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio).
-    pub fn builder(alloc: Allocator, width: usize, aspectRatio: f64) *CameraBuilder {
+    pub fn builder(alloc: Allocator, io: Io, prng: *DefaultPrng, width: usize, aspectRatio: f64) *CameraBuilder {
         // Allocate space on the heap for the builder.
         const builderPtr = alloc.create(CameraBuilder) catch unreachable;
         builderPtr.* = CameraBuilder{
             .alloc = alloc,
+            .io = io,
             .image = Image.init(width, aspectRatio),
         };
         return builderPtr;
@@ -122,7 +126,7 @@ pub const Camera = struct {
 
     pub fn render(self: Camera) !void {
         // Setup Image/PPM
-        var ppm = PPM.init(self.alloc, self.image.width, self.image.height);
+        var ppm = PPM.init(self.alloc, self.io, self.image.width, self.image.height);
         defer ppm.deinit();
 
         for (0..ppm.height) |j| {
@@ -316,6 +320,7 @@ pub const CameraBuilder = struct {
 
         return .{
             .alloc = self.alloc,
+            .io = self.io,
             .image = self.image,
             .scene = if (self.scene) |s| s else Scene.init(self.alloc, null),
             .viewport = self.viewport.?,
@@ -388,7 +393,7 @@ test "Viewport" {
 test "CameraBuilder" {
     const vFov = 90;
 
-    var builder = Camera.builder(std.testing.allocator, 400, (16.0 / 9.0));
+    var builder = Camera.builder(std.testing.allocator, std.testing.io, testPrng(), 400, (16.0 / 9.0));
 
     try std.testing.expectEqual(defaultCameraCenter, builder.center);
     try std.testing.expectEqual(defaultLookFrom, builder.lookFrom);
@@ -482,7 +487,7 @@ test "Camera" {
     };
     defer camera.deinit();
 
-    const init = Camera.builder(std.testing.allocator, 400, (16.0 / 9.0))
+    const init = Camera.builder(std.testing.allocator, std.testing.io, testPrng(), 400, (16.0 / 9.0))
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer init.deinit();
@@ -532,7 +537,7 @@ test "Camera" {
 }
 
 test "Camera.sampleSquare()" {
-    const camera = Camera.builder(std.testing.allocator, 400, 1.0)
+    const camera = Camera.builder(std.testing.allocator, std.testing.io, testPrng(), 400, 1.0)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();
@@ -547,7 +552,7 @@ test "Camera.sampleSquare()" {
 }
 
 test "Camera.defocusDiskSample()" {
-    const camera = Camera.builder(std.testing.allocator, 400, 1.0)
+    const camera = Camera.builder(std.testing.allocator, std.testing.io, testPrng(), 400, 1.0)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
     defer camera.deinit();
