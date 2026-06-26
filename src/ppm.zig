@@ -1,19 +1,22 @@
 const std = @import("std");
 const Color = @import("color.zig").Color;
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 
 pub const PPM = struct {
     width: usize,
     height: usize,
     pixels: []Color,
     allocator: Allocator,
+    io: Io,
 
-    pub fn init(allocator: Allocator, width: usize, height: usize) PPM {
+    pub fn init(allocator: Allocator, io: Io, width: usize, height: usize) PPM {
         return .{
             .width = width,
             .height = height,
             .pixels = allocator.alloc(Color, width * height) catch unreachable,
             .allocator = allocator,
+            .io = io,
         };
     }
 
@@ -23,17 +26,17 @@ pub const PPM = struct {
 
     /// Saves the pixels which contains the image information into the PPM specific format.
     pub fn save(self: PPM, filename: []const u8) !void {
-        var file = try std.fs.cwd().createFile(filename, .{});
-        defer file.close();
+        var file = try std.Io.Dir.cwd().createFile(self.io, filename, .{});
+        defer file.close(self.io);
 
         var buf: [2048]u8 = undefined;
-        var fileWriter = file.writer(&buf);
+        var fileWriter = file.writer(self.io, &buf);
         const writer: *std.Io.Writer = &fileWriter.interface;
 
         _ = try writer.print("P3\n{d} {d}\n255\n", .{ self.width, self.height });
 
         for (self.pixels) |p| {
-            _ = try writer.print("{s}\n", .{p});
+            _ = try writer.print("{f}\n", .{p});
         }
 
         try writer.flush();
@@ -41,11 +44,11 @@ pub const PPM = struct {
 
     // Saves the PPM in binary format
     pub fn saveBinary(self: PPM, filename: []const u8) !void {
-        var file = try std.fs.cwd().createFile(filename, .{});
-        defer file.close();
+        var file = try std.Io.Dir.cwd().createFile(self.io, filename, .{});
+        defer file.close(self.io);
 
         var buf: [2048]u8 = undefined;
-        var fileWriter = file.writer(&buf);
+        var fileWriter = file.writer(self.io, &buf);
         const writer: *std.Io.Writer = &fileWriter.interface;
 
         _ = try writer.print("P6\n{d} {d}\n255\n", .{ self.width, self.height });
@@ -63,7 +66,7 @@ pub const PPM = struct {
 };
 
 test "init()" {
-    var ppm = PPM.init(std.testing.allocator, 256, 512);
+    var ppm = PPM.init(std.testing.allocator, std.testing.io, 256, 512);
     defer ppm.deinit();
 
     try std.testing.expectEqual(256, ppm.width);
@@ -72,11 +75,13 @@ test "init()" {
 }
 
 test "save()" {
-    var ppm = PPM.init(std.testing.allocator, 1, 1);
+    const io = std.testing.io;
+
+    var ppm = PPM.init(std.testing.allocator, std.testing.io, 1, 1);
     defer ppm.deinit();
 
     try ppm.save("test.ppm");
-    defer std.fs.cwd().deleteFile("test.ppm") catch unreachable;
+    defer std.Io.Dir.cwd().deleteFile(io, "test.ppm") catch unreachable;
 
     const expected =
         \\P3
@@ -85,23 +90,25 @@ test "save()" {
         \\0 0 0
         \\
     ;
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test.ppm", 1e6);
+    const actual = try std.Io.Dir.cwd().readFileAlloc(io, "test.ppm", std.testing.allocator, Io.Limit.limited(1e6));
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);
 }
 
 test "saveBinary()" {
-    var ppm = PPM.init(std.testing.allocator, 1, 1);
+    const io = std.testing.io;
+
+    var ppm = PPM.init(std.testing.allocator, std.testing.io, 1, 1);
     defer ppm.deinit();
 
     try ppm.saveBinary("test-binary.ppm");
-    defer std.fs.cwd().deleteFile("test-binary.ppm") catch unreachable;
+    defer std.Io.Dir.cwd().deleteFile(io, "test-binary.ppm") catch unreachable;
 
-    const expected = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-files/test-binary.ppm", 1024);
+    const expected = try std.Io.Dir.cwd().readFileAlloc(io, "test-files/test-binary.ppm", std.testing.allocator, Io.Limit.limited(1024));
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.fs.cwd().readFileAlloc(std.testing.allocator, "test-binary.ppm", 1024);
+    const actual = try std.Io.Dir.cwd().readFileAlloc(io, "test-binary.ppm", std.testing.allocator, Io.Limit.limited(1024));
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);

@@ -33,7 +33,7 @@ test "degToRad()" {
 test "randomDouble()" {
     var prng = DefaultPrng.init(blk: {
         var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        std.testing.io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
 
@@ -59,7 +59,7 @@ test "randomDouble()" {
 test "randomDoubleRange()" {
     var prng = DefaultPrng.init(blk: {
         var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        std.testing.io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
 

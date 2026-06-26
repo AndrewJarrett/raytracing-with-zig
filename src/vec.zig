@@ -16,7 +16,7 @@ pub const Vec = struct {
     }
 
     pub inline fn zero() Vec3 {
-        comptime return Vec3{ 0, 0, 0 };
+        comptime return Vec3{ 0.0, 0.0, 0.0 };
     }
 
     pub inline fn splat(scalar: f64) Vec3 {
@@ -127,10 +127,7 @@ pub const Vec = struct {
         return Vec.divScalar(v, Vec.len(v));
     }
 
-    pub fn format(self: Vec, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = options;
-        _ = fmt;
-
+    pub fn format(self: Vec, writer: anytype) !void {
         try writer.print("{any}", .{self.v});
     }
 };
@@ -198,7 +195,7 @@ test "lenSquared()" {
 test "random()" {
     var prng = DefaultPrng.init(blk: {
         var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        std.testing.io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
 
@@ -221,8 +218,8 @@ test "random()" {
 
 test "randomRange()" {
     var prng = DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
+        var seed: u64  = undefined;
+        std.testing.io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
 
@@ -304,9 +301,9 @@ test "Point alias" {
 
 test "format()" {
     const v = Vec{ .v = Vec.zero() };
-    const expected = "{ 0e0, 0e0, 0e0 }";
+    const expected = "{ 0, 0, 0 }";
 
     var buffer: [20]u8 = undefined;
-    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{v});
+    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{f}", .{v});
     try std.testing.expectEqualStrings(expected, actual);
 }

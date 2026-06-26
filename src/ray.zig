@@ -4,6 +4,8 @@ const Point = @import("vec.zig").Point;
 const Point3 = @import("vec.zig").Point3;
 const Vec3 = @import("vec.zig").Vec3;
 
+const Writer = std.Io.Writer;
+
 pub const Ray = struct {
     orig: Point3,
     dir: Vec3,
@@ -16,10 +18,7 @@ pub const Ray = struct {
         return self.orig + (self.dir * Vec.splat(t));
     }
 
-    pub fn format(self: *const Ray, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-
+    pub fn format(self: *const Ray, writer: anytype) !void {
         try writer.print("{any} -> {any}", .{ self.orig, self.dir });
     }
 };
@@ -48,14 +47,13 @@ test "at()" {
 }
 
 test "format()" {
-    const orig = Point3{ 0, 0, 0 };
-    const dir = Vec3{ 1, 2, 3 };
+    const orig = Point3{ 0.1, 0.9, 0.5 };
+    const dir = Vec3{ 1.0, 2.0, 3.0 };
     const ray = Ray.init(orig, dir);
 
-    const expected = "{ 0e0, 0e0, 0e0 } -> { 1e0, 2e0, 3e0 }";
+    const expected = "{ 0.1, 0.9, 0.5 } -> { 1, 2, 3 }";
     var buffer: [50]u8 = undefined;
-    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{ray});
-    //const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{ray});
+    const actual = try std.fmt.bufPrint(buffer[0..50], "{f}", .{ray});
 
     try std.testing.expectEqualStrings(expected, actual);
 }
