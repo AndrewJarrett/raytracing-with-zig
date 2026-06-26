@@ -36,7 +36,7 @@ pub const PPM = struct {
         _ = try writer.print("P3\n{d} {d}\n255\n", .{ self.width, self.height });
 
         for (self.pixels) |p| {
-            _ = try writer.print("{s}\n", .{p});
+            _ = try writer.print("{f}\n", .{p});
         }
 
         try writer.flush();
@@ -66,7 +66,7 @@ pub const PPM = struct {
 };
 
 test "init()" {
-    var ppm = PPM.init(std.testing.allocator, 256, 512);
+    var ppm = PPM.init(std.testing.allocator, std.testing.io, 256, 512);
     defer ppm.deinit();
 
     try std.testing.expectEqual(256, ppm.width);
@@ -77,7 +77,7 @@ test "init()" {
 test "save()" {
     const io = std.testing.io;
 
-    var ppm = PPM.init(std.testing.allocator, 1, 1);
+    var ppm = PPM.init(std.testing.allocator, std.testing.io, 1, 1);
     defer ppm.deinit();
 
     try ppm.save("test.ppm");
@@ -90,7 +90,7 @@ test "save()" {
         \\0 0 0
         \\
     ;
-    const actual = try std.Io.Dir.cwd().readFileAlloc(io, std.testing.allocator, "test.ppm", 1e6);
+    const actual = try std.Io.Dir.cwd().readFileAlloc(io, "test.ppm", std.testing.allocator, Io.Limit.limited(1e6));
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);
@@ -99,16 +99,16 @@ test "save()" {
 test "saveBinary()" {
     const io = std.testing.io;
 
-    var ppm = PPM.init(std.testing.allocator, 1, 1);
+    var ppm = PPM.init(std.testing.allocator, std.testing.io, 1, 1);
     defer ppm.deinit();
 
     try ppm.saveBinary("test-binary.ppm");
     defer std.Io.Dir.cwd().deleteFile(io, "test-binary.ppm") catch unreachable;
 
-    const expected = try std.Io.Dir.cwd().readFileAlloc(io, std.testing.allocator, "test-files/test-binary.ppm", 1024);
+    const expected = try std.Io.Dir.cwd().readFileAlloc(io, "test-files/test-binary.ppm", std.testing.allocator, Io.Limit.limited(1024));
     defer std.testing.allocator.free(expected);
 
-    const actual = try std.Io.Dir.cwd().readFileAlloc(io, std.testing.allocator, "test-binary.ppm", 1024);
+    const actual = try std.Io.Dir.cwd().readFileAlloc(io, "test-binary.ppm", std.testing.allocator, Io.Limit.limited(1024));
     defer std.testing.allocator.free(actual);
 
     try std.testing.expectEqualStrings(expected, actual);

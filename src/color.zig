@@ -10,10 +10,7 @@ pub const RGB = struct {
     g: u8,
     b: u8,
 
-    pub fn format(self: RGB, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-
+    pub fn format(self: RGB, writer: anytype) !void {
         try writer.print("{d} {d} {d}", .{ self.r, self.g, self.b });
     }
 };
@@ -79,11 +76,8 @@ pub const Color = struct {
         return if (linear > 0) @sqrt(linear) else 0;
     }
 
-    pub fn format(self: Color, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-
-        try writer.print("{s}", .{self.toRgb()});
+    pub fn format(self: Color, writer: anytype) !void {
+        try writer.print("{f}", .{self.toRgb()});
     }
 };
 
@@ -104,7 +98,7 @@ test "rgb struct" {
     try std.testing.expectEqual(255, rgb.b);
 
     var buffer: [20]u8 = undefined;
-    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{rgb});
+    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{f}", .{rgb});
     try std.testing.expectEqualStrings(expected, actual);
 
     // Ensure the struct is packed
@@ -176,6 +170,6 @@ test "format()" {
     const expected = "0 181 221";
 
     var buffer: [20]u8 = undefined;
-    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{s}", .{c});
+    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{f}", .{c});
     try std.testing.expectEqualStrings(expected, actual);
 }
