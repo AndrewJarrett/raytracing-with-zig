@@ -28,19 +28,11 @@ pub fn init(allocator: Allocator, io: Io) Self {
     };
 }
 
-pub fn generateWorld(self: *Self, seed: ?u64) void {
+pub fn generateWorld(self: *Self, seed: u64) void {
     // Create temporary RNG based on optional seed
     const prng = self.alloc.create(DefaultPrng) catch unreachable;
     defer self.alloc.destroy(prng);
-    prng.* = DefaultPrng.init(blk: {
-        if (seed) |s| {
-            break :blk s;
-        } else {
-            var s: u64 = undefined;
-            self.io.random(std.mem.asBytes(&s));
-            break :blk s;
-        }
-    });
+    prng.* = DefaultPrng.init(seed);
 
     // Materials and objects
     // Ground

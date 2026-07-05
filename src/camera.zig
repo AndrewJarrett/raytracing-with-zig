@@ -10,10 +10,10 @@ const config = @import("config");
 const Color = @import("color.zig").Color;
 const Color3 = @import("color.zig").Color3;
 const HittableList = @import("hittable.zig").HittableList;
+const Image = @import("Image.zig");
 const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
 const Point3 = @import("vec.zig").Point3;
-const Image = @import("Image.zig");
 const Ray = @import("ray.zig").Ray;
 const Scene = @import("Scene.zig");
 const util = @import("util.zig");
@@ -89,7 +89,7 @@ pub const Camera = struct {
         return builderPtr;
     }
 
-    pub fn render(self: Camera, seed: ?u64) !void {
+    pub fn render(self: Camera, seed: u64) !void {
         const width = self.image.width;
         const height = self.image.height;
 
@@ -97,8 +97,9 @@ pub const Camera = struct {
         var group = Io.Group.init;
         defer group.cancel(self.io);
 
-        const numCpus = std.Thread.getCpuCount() catch unreachable;
+        const numCpus = std.Thread.getCpuCount() catch 1;
         const rows = height / numCpus;
+        std.log.info("Processing with {} threads.\n", .{ numCpus });
 
         for (0..numCpus) |t| {
             const startRow = t * rows;
@@ -117,22 +118,14 @@ pub const Camera = struct {
         try self.image.savePpmBinary("images/" ++ config.fileName);
     }
 
-    fn renderRow(self: Camera, seed: ?u64, startRow: usize, endRow: usize, slice: []Color) void {
+    fn renderRow(self: Camera, seed: u64, startRow: usize, endRow: usize, slice: []Color) void {
         const height = self.image.height;
         const width = self.image.width;
 
         // Create thread local RNG
         const prng: *DefaultPrng = self.alloc.create(DefaultPrng) catch unreachable;
         defer self.alloc.destroy(prng);
-        prng.* = DefaultPrng.init(blk: {
-            if (seed) |s| {
-                break :blk s;
-            } else {
-                var s: u64 = undefined;
-                self.io.random(std.mem.asBytes(&s));
-                break :blk s;
-            }
-        });
+        prng.* = DefaultPrng.init(seed);
 
         for (startRow..endRow) |globalRow| {
             const localRow = globalRow - startRow;

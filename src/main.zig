@@ -20,10 +20,13 @@ pub fn main(init: std.process.Init) !void {
     defer init.arena.deinit();
     const alloc = init.arena.allocator();
 
+    // Use or generate a common seed
+    const seed = initSeed(io);
+
     // Generate the random scene
     var scene = Scene.init(alloc, io);
     defer scene.deinit();
-    scene.generateWorld(config.seed);
+    scene.generateWorld(seed);
 
     // Create threaded Io
     var threaded = std.Io.Threaded.init(alloc, .{});
@@ -35,7 +38,21 @@ pub fn main(init: std.process.Init) !void {
 
     // Camera / render
     var camera = initCamera(alloc, threaded.io(), image, scene);
-    try camera.render(config.seed);
+    try camera.render(seed);
+}
+
+fn initSeed(io: Io) u64 {
+    var seed: u64 = undefined;
+
+    if (config.seed) |s| {
+        seed = s;
+    } else {
+        var s: u64 = undefined;
+        io.random(std.mem.asBytes(&s));
+        seed = s;
+    }
+
+    return seed;
 }
 
 fn initPrng(alloc: Allocator, io: Io, seed: ?u64) *DefaultPrng {
@@ -76,17 +93,20 @@ test "main" {
     const io = std.testing.io;
     const gpa = std.testing.allocator;
 
+    // Use or generate a common seed
+    const seed = initSeed(io);
+
     // Generate the random scene
     var scene = Scene.init(gpa, io);
     defer scene.deinit();
-    scene.generateWorld(config.seed);
+    scene.generateWorld(seed);
 
     var image = Image.init(gpa, io, config.imgWidth, config.aspectRatio);
     defer image.deinit();
 
     // Camera
     var camera = initCamera(gpa, io, image, scene);
-    try camera.render(config.seed);
+    try camera.render(seed);
 
     const expected = try std.Io.Dir.cwd().readFileAlloc(io, "test-files/" ++ config.fileName, gpa, Io.Limit.limited(5e5));
     defer gpa.free(expected);
