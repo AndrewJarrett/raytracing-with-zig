@@ -64,7 +64,7 @@ test "init()" {
     const radius = 1.0;
     const mat = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 }, .prng = prngPtr },
+        .{ .albedo = Color3{ 1, 1, 1 } },
     );
     const sphere = Sphere.init(center, radius, mat);
 
@@ -83,11 +83,11 @@ test "hit() success" {
     const radius = 1.0;
     const mat = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 }, .prng = prngPtr },
+        .{ .albedo = Color3{ 1, 1, 1 } },
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 });
+    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, prngPtr);
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
 
     try std.testing.expect(hitRecord != null);
@@ -107,11 +107,11 @@ test "hit() hit out of range" {
     const radius = 1.0;
     const mat = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 }, .prng = prngPtr },
+        .{ .albedo = Color3{ 1, 1, 1 } },
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 });
+    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, prngPtr);
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 0.0));
     try std.testing.expect(hitRecord == null);
 }
@@ -126,11 +126,11 @@ test "hit() no hit" {
     const radius = 1.0;
     const mat = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 }, .prng = prngPtr },
+        .{ .albedo = Color3{ 1, 1, 1 } },
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, 1 });
+    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, 1 }, prngPtr);
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
     try std.testing.expect(hitRecord == null);
 }

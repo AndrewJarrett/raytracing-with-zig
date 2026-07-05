@@ -23,6 +23,7 @@ pub fn main(init: std.process.Init) !void {
     // Generate the random scene
     var scene = Scene.init(alloc, io);
     defer scene.deinit();
+    scene.generateWorld(config.seed);
     // Create Image
     var image = Image.init(gpa, io, config.imgWidth, config.aspectRatio);
     defer image.deinit();

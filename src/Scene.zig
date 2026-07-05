@@ -1,36 +1,52 @@
 const std = @import("std");
-const HittableList = @import("hittable.zig").HittableList;
-const Hittable = @import("hittable.zig").Hittable;
-const Material = @import("material.zig").Material;
+const Allocator = std.mem.Allocator;
+const DefaultPrng = std.Random.DefaultPrng;
+const Io = std.Io;
+
 const Color3 = @import("color.zig").Color3;
-const Vec = @import("vec.zig").Vec;
+const Hittable = @import("hittable.zig").Hittable;
+const HittableList = @import("hittable.zig").HittableList;
+const Interval = @import("interval.zig").Interval;
+const Material = @import("material.zig").Material;
 const Point3 = @import("vec.zig").Point3;
 const util = @import("util.zig");
-const Interval = @import("interval.zig").Interval;
+const Vec = @import("vec.zig").Vec;
 
 const inf = std.math.inf(f64);
 
-const Allocator = std.mem.Allocator;
-const DefaultPrng = std.Random.DefaultPrng;
-
 const Self = @This();
 alloc: Allocator,
+io: Io,
 world: HittableList,
 interval: Interval = Interval.init(1e-3, inf), // Default - edit field directly if needed
 
-pub fn init(allocator: Allocator) Self {
+pub fn init(allocator: Allocator, io: Io) Self {
     return .{
         .alloc = allocator,
+        .io = io,
         .world = HittableList.init(),
     };
 }
 
-pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
+pub fn generateWorld(self: *Self, seed: ?u64) void {
+    // Create temporary RNG based on optional seed
+    const prng = self.alloc.create(DefaultPrng) catch unreachable;
+    defer self.alloc.destroy(prng);
+    prng.* = DefaultPrng.init(blk: {
+        if (seed) |s| {
+            break :blk s;
+        } else {
+            var s: u64 = undefined;
+            self.io.random(std.mem.asBytes(&s));
+            break :blk s;
+        }
+    });
+
     // Materials and objects
     // Ground
     const matGround = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 0.5, 0.5, 0.5 }, .prng = prng },
+        .{ .albedo = Color3{ 0.5, 0.5, 0.5 } },
     );
     self.world.add(self.alloc, Hittable.init(.sphere, .{
         .center = Point3{ 0, -1000, 0 },
@@ -55,7 +71,6 @@ pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
                 // 5% chance of glass
                 var sphereMaterial = Material.init(.dielectric, .{
                     .refractionIndex = 1.5,
-                    .prng = prng,
                 });
 
                 if (chooseMat < 0.8) {
@@ -63,7 +78,6 @@ pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
                     const albedo = Vec.random(prng) * Vec.random(prng);
                     sphereMaterial = Material.init(.lambertian, .{
                         .albedo = albedo,
-                        .prng = prng,
                     });
                 } else if (chooseMat < 0.95) {
                     // 15% metal
@@ -72,7 +86,6 @@ pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
                     sphereMaterial = Material.init(.metal, .{
                         .albedo = albedo,
                         .fuzz = fuzz,
-                        .prng = prng,
                     });
                 }
 
@@ -87,7 +100,7 @@ pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
 
     const mat1 = Material.init(
         .dielectric,
-        .{ .refractionIndex = 1.5, .prng = prng },
+        .{ .refractionIndex = 1.5 },
     );
     self.world.add(self.alloc, Hittable.init(
         .sphere,
@@ -96,7 +109,7 @@ pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
 
     const mat2 = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 0.4, 0.2, 0.1 }, .prng = prng },
+        .{ .albedo = Color3{ 0.4, 0.2, 0.1 } },
     );
     self.world.add(self.alloc, Hittable.init(
         .sphere,
@@ -105,7 +118,7 @@ pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
 
     const mat3 = Material.init(
         .metal,
-        .{ .albedo = Color3{ 0.7, 0.6, 0.5 }, .fuzz = 0, .prng = prng },
+        .{ .albedo = Color3{ 0.7, 0.6, 0.5 }, .fuzz = 0 },
     );
     self.world.add(self.alloc, Hittable.init(
         .sphere,
@@ -113,10 +126,10 @@ pub fn generateWorld(self: *Self, prng: *DefaultPrng) void {
     ));
 }
 
-pub fn generateChapter13(self: *Self, prng: *DefaultPrng) void {
+pub fn generateChapter13(self: *Self) void {
     const matGround = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 0.8, 0.8, 0.0 }, .prng = prng },
+        .{ .albedo = Color3{ 0.8, 0.8, 0.0 } },
     );
     self.world.add(self.alloc, Hittable.init(.sphere, .{
         .center = Point3{ 0, -100.5, -1 },
@@ -126,7 +139,7 @@ pub fn generateChapter13(self: *Self, prng: *DefaultPrng) void {
 
     const matCenter = Material.init(
         .lambertian,
-        .{ .albedo = Color3{ 0.1, 0.2, 0.5 }, .prng = prng },
+        .{ .albedo = Color3{ 0.1, 0.2, 0.5 } },
     );
     self.world.add(self.alloc, Hittable.init(
         .sphere,
@@ -135,7 +148,7 @@ pub fn generateChapter13(self: *Self, prng: *DefaultPrng) void {
 
     const matLeft = Material.init(
         .dielectric,
-        .{ .refractionIndex = 1.5, .prng = prng },
+        .{ .refractionIndex = 1.5 },
     );
     self.world.add(self.alloc, Hittable.init(
         .sphere,
@@ -144,7 +157,7 @@ pub fn generateChapter13(self: *Self, prng: *DefaultPrng) void {
 
     const matBubble = Material.init(
         .dielectric,
-        .{ .refractionIndex = 1.0 / 1.5, .prng = prng },
+        .{ .refractionIndex = 1.0 / 1.5 },
     );
     self.world.add(self.alloc, Hittable.init(
         .sphere,
@@ -153,7 +166,7 @@ pub fn generateChapter13(self: *Self, prng: *DefaultPrng) void {
 
     const matRight = Material.init(
         .metal,
-        .{ .albedo = Color3{ 0.8, 0.6, 0.2 }, .fuzz = 1, .prng = prng },
+        .{ .albedo = Color3{ 0.8, 0.6, 0.2 }, .fuzz = 1 },
     );
     self.world.add(self.alloc, Hittable.init(
         .sphere,
@@ -167,9 +180,8 @@ pub fn deinit(self: *Self) void {
 
 test "Scene" {
     const seed = 0xabadcafe;
-    var prng = DefaultPrng.init(seed);
 
-    var scene = Self.init(std.testing.allocator);
+    var scene = Self.init(std.testing.allocator, std.testing.io);
     defer scene.deinit();
 
     // The world should be empty
@@ -177,7 +189,7 @@ test "Scene" {
     try std.testing.expectEqualDeep(Interval.init(1e-3, inf), scene.interval);
 
     // Generate the world now
-    scene.generateWorld(&prng);
+    scene.generateWorld(seed);
 
     // Should contain the ground, 3 big balls, and 22*22 little balls
     // Subtract any that don't meet the criteria (3 for this seed)
