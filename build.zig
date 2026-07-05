@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
     const buildOptions = b.addOptions();
     buildOptions.addOption(usize, "imgWidth", imgWidth);
     buildOptions.addOption(usize, "samplesPerPixel", samplesPerPixel);
+    buildOptions.addOption(f64, "aspectRatio", (16.0 / 9.0));
     buildOptions.addOption([]const u8, "fileName", fileName);
     buildOptions.addOption(?u64, "seed", seed);
 
@@ -66,6 +67,7 @@ pub fn build(b: *std.Build) void {
     const testOptions = b.addOptions();
     testOptions.addOption(usize, "imgWidth", 400);
     testOptions.addOption(usize, "samplesPerPixel", 10);
+    testOptions.addOption(f64, "aspectRatio", (16.0 / 9.0));
     testOptions.addOption([]const u8, "fileName", fileName);
     testOptions.addOption(?u64, "seed", 0xdeadbeef);
 

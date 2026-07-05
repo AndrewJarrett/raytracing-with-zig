@@ -1,14 +1,15 @@
 const std = @import("std");
-const util = @import("util.zig");
-const config = @import("config");
-
-const Point3 = @import("vec.zig").Point3;
-const Camera = @import("camera.zig").Camera;
-const Scene = @import("Scene.zig");
-
 const Allocator = std.mem.Allocator;
 const DefaultPrng = std.Random.DefaultPrng;
 const Io = std.Io;
+
+const config = @import("config");
+
+const Camera = @import("camera.zig").Camera;
+const Image = @import("Image.zig");
+const Point3 = @import("vec.zig").Point3;
+const Scene = @import("Scene.zig");
+const util = @import("util.zig");
 
 const inf = std.math.inf(f64);
 
@@ -17,20 +18,18 @@ pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
 
     defer init.arena.deinit();
-    const allocator = init.arena.allocator();
-
-    // Create a DefaultPrng using the optional seed if provided.
-    const prng: *DefaultPrng = initPrng(gpa, io, config.seed);
-    defer gpa.destroy(prng);
+    const alloc = init.arena.allocator();
 
     // Generate the random scene
-    var scene = Scene.init(allocator);
+    var scene = Scene.init(alloc, io);
     defer scene.deinit();
-    scene.generateWorld(prng);
+    // Create Image
+    var image = Image.init(gpa, io, config.imgWidth, config.aspectRatio);
+    defer image.deinit();
 
     // Camera / render
-    var camera = initCamera(allocator, io, prng, config, scene);
-    try camera.render(allocator);
+    var camera = initCamera(alloc, threaded.io(), image, scene);
+    try camera.render(config.seed);
 }
 
 fn initPrng(alloc: Allocator, io: Io, seed: ?u64) *DefaultPrng {
@@ -47,10 +46,9 @@ fn initPrng(alloc: Allocator, io: Io, seed: ?u64) *DefaultPrng {
     return prng;
 }
 
-fn initCamera(alloc: Allocator, io: Io, prng: *DefaultPrng, scene: Scene) Camera {
+fn initCamera(alloc: Allocator, io: Io, image: Image, scene: Scene) Camera {
     // Builv Camera
-    const aspectRatio = 16.0 / 9.0;
-    return Camera.builder(alloc, io, prng, config.imgWidth, aspectRatio)
+    return Camera.builder(alloc, io, image)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
@@ -64,6 +62,7 @@ fn initCamera(alloc: Allocator, io: Io, prng: *DefaultPrng, scene: Scene) Camera
 // result will be the same every time.
 test "main" {
     try std.testing.expect(config.imgWidth == 400);
+    try std.testing.expect(config.aspectRatio == (16.0 / 9.0));
     try std.testing.expect(config.samplesPerPixel == 10);
     try std.testing.expect(config.seed != null);
 
@@ -71,18 +70,17 @@ test "main" {
     const io = std.testing.io;
     const gpa = std.testing.allocator;
 
-    // Create a DefaultPrng using the optional seed if provided.
-    const prng: *DefaultPrng = initPrng(gpa, io, config.seed);
-    defer gpa.destroy(prng);
-
     // Generate the random scene
-    var scene = Scene.init(gpa);
+    var scene = Scene.init(gpa, io);
     defer scene.deinit();
-    scene.generateWorld(prng);
+    scene.generateWorld(config.seed);
+
+    var image = Image.init(gpa, io, config.imgWidth, config.aspectRatio);
+    defer image.deinit();
 
     // Camera
-    var camera = initCamera(gpa, io, prng, scene);
-    try camera.render(gpa);
+    var camera = initCamera(gpa, io, image, scene);
+    try camera.render(config.seed);
 
     const expected = try std.Io.Dir.cwd().readFileAlloc(io, "test-files/" ++ config.fileName, gpa, Io.Limit.limited(5e5));
     defer gpa.free(expected);

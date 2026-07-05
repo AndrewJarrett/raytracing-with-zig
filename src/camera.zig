@@ -1,9 +1,9 @@
 const std = @import("std");
-const builtin = @import("builtin");
-const DefaultPrng = std.Random.DefaultPrng;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const DefaultPrng = std.Random.DefaultPrng;
 const degToRad = std.math.degreesToRadians;
+const builtin = @import("builtin");
 
 const config = @import("config");
 
@@ -13,7 +13,7 @@ const HittableList = @import("hittable.zig").HittableList;
 const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
 const Point3 = @import("vec.zig").Point3;
-const PPM = @import("ppm.zig").PPM;
+const Image = @import("Image.zig");
 const Ray = @import("ray.zig").Ray;
 const Scene = @import("Scene.zig");
 const util = @import("util.zig");
@@ -25,33 +25,6 @@ const inf = std.math.inf(f64);
 const white = Color3{ 1, 1, 1 };
 const blue = Color3{ 0.5, 0.7, 1 };
 const black = Color3{ 0, 0, 0 };
-
-const Image = struct {
-    width: usize = 100,
-    height: usize = 100,
-
-    /// The preferred method of initialization is through the Camera struct and only
-    /// needs to be provided with the width of the image and the aspectRatio. The height
-    /// Interval.init(1e-3, inf)will be calculated automatically based on the width of the image and the aspectRatio.
-    pub fn init(width: usize, ratio: f64) Image {
-        const height: usize = @intFromFloat(@as(f64, @floatFromInt(width)) / ratio);
-
-        return .{
-            .width = width,
-            .height = if (height < 1) 1 else height,
-        };
-    }
-
-    /// We don't need to store this as a separate struct field. It can be calculated if it is
-    /// ever needed after creation of the struct
-    pub fn aspectRatio(self: Image) f64 {
-        return @as(f64, @floatFromInt(self.width)) / @as(f64, @floatFromInt(self.height));
-    }
-
-    pub fn format(self: Image, writer: anytype) !void {
-        try writer.print("{d}x{d} ({d})", .{ self.width, self.height, self.aspectRatio() });
-    }
-};
 
 const Viewport = struct {
     width: f64,
@@ -77,8 +50,8 @@ const Viewport = struct {
 };
 
 pub const Camera = struct {
+    alloc: Allocator,
     io: Io,
-    prng: *DefaultPrng,
     image: Image,
     viewport: Viewport,
     scene: Scene,
@@ -100,26 +73,25 @@ pub const Camera = struct {
     dv: Vec3, // Offset to pixel below
     pixel0: Point3, // Location of pixel (0, 0)
 
-    /// Provide an allocator, the width of the image, and an aspect ratio in order to setup a Camera.
+    /// Provide an allocator, an Io implementation (ideally a Threaded.Io), and a Image (which contains
+    /// the width of the image and an aspect ratio) in order to setup a Camera.
     /// Uses the Builder pattern to construct a correct Camera. Do not set fields manually unless
     /// you are sure you set everything correctly (i.e. the width/height need to match the aspect
-    /// ratio).
-    pub fn builder(alloc: Allocator, io: Io, prng: *DefaultPrng, width: usize, aspectRatio: f64) *CameraBuilder {
+    /// ratio, etc).
+    pub fn builder(alloc: Allocator, io: Io, image: Image) *CameraBuilder {
         // Allocate space on the heap for the builder.
         const builderPtr = alloc.create(CameraBuilder) catch unreachable;
         builderPtr.* = CameraBuilder{
             .alloc = alloc,
             .io = io,
-            .prng = prng,
-            .image = Image.init(width, aspectRatio),
+            .image = image,
         };
         return builderPtr;
     }
 
     pub fn render(self: Camera, alloc: Allocator) !void {
-        // Setup Image/PPM
-        var ppm = PPM.init(alloc, self.io, self.image.width, self.image.height);
-        defer ppm.deinit();
+        const width = self.image.width;
+        const height = self.image.height;
 
         for (0..ppm.height) |j| {
             std.log.info("\rScanlines remaining: {d} ", .{ppm.height - j});
@@ -136,8 +108,6 @@ pub const Camera = struct {
         }
         std.log.info("\rDone.\n", .{});
 
-        // Save the file
-        try ppm.saveBinary("images/" ++ config.fileName);
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
@@ -180,33 +150,36 @@ pub const Camera = struct {
 
     /// Gets a Camera Ray that originates from the origin point and is directed
     /// towards a randomized sample point around the pixel location (i, j)
-    fn getRay(self: Camera, i: usize, j: usize) Ray {
-        const randomOffset = self.sampleSquare();
+    fn getRay(self: Camera, i: usize, j: usize, prng: *DefaultPrng) Ray {
+        const randomOffset = self.sampleSquare(prng);
         const pixelSample = self.pixel0 + Vec.mulScalar(self.du, @as(f64, @floatFromInt(i)) + randomOffset[0]) + Vec.mulScalar(self.dv, @as(f64, @floatFromInt(j)) + randomOffset[1]);
 
         const rayOrigin = if (self.defocusAngle <= 0)
             self.center
         else
-            self.defocusDiskSample();
+            self.defocusDiskSample(prng);
 
         return Ray.init(
             rayOrigin,
             pixelSample - rayOrigin,
+            prng,
         );
     }
 
     /// Return a vector to a random point in the [-.5,-.5] - [+.5,+.5] unit square
-    fn sampleSquare(self: Camera) Vec3 {
+    fn sampleSquare(camera: Camera, prng: *DefaultPrng) Vec3 {
+        _ = camera;
+
         return Vec3{
-            util.randomDouble(self.prng) - 0.5,
-            util.randomDouble(self.prng) - 0.5,
+            util.randomDouble(prng) - 0.5,
+            util.randomDouble(prng) - 0.5,
             0,
         };
     }
 
     /// Returns a random point in the camera defocus disk
-    fn defocusDiskSample(self: Camera) Point3 {
-        const p = Vec.randomInUnitDisk(self.prng);
+    fn defocusDiskSample(self: Camera, prng: *DefaultPrng) Point3 {
+        const p = Vec.randomInUnitDisk(prng);
         return self.center + Vec.mulScalar(self.defocusDiskU, p[0]) + Vec.mulScalar(self.defocusDiskV, p[1]);
     }
 };
@@ -230,7 +203,6 @@ pub const CameraBuilder = struct {
     /// Required
     alloc: Allocator,
     io: Io,
-    prng: *DefaultPrng,
     image: Image,
 
     /// Configurable/buildable parameters
@@ -313,10 +285,10 @@ pub const CameraBuilder = struct {
         const defocusRadius = self.focusDist.? * @tan(degToRad(self.defocusAngle.? / 2.0));
 
         return .{
+            .alloc = self.alloc,
             .io = self.io,
-            .prng = self.prng,
             .image = self.image,
-            .scene = if (self.scene) |s| s else Scene.init(self.alloc),
+            .scene = if (self.scene) |s| s else Scene.init(self.alloc, self.io),
             .viewport = self.viewport.?,
             .samplesPerPixel = self.samplesPerPixel.?,
             .pixelSamplesScale = self.pixelSamplesScale.?,
@@ -339,38 +311,19 @@ pub const CameraBuilder = struct {
     }
 };
 
-test "Image" {
-    const img = Image{ .width = 800, .height = 400 };
-    const img2 = Image.init(400, 1.0);
-    const default = Image{};
-    const imgHeightOne = Image.init(1, 2.0);
-    const expected = "400x400 (1)";
-
-    var buffer: [20]u8 = undefined;
-    const actual = try std.fmt.bufPrint(buffer[0..expected.len], "{f}", .{img2});
-
-    try std.testing.expectEqual(800, img.width);
-    try std.testing.expectEqual(400, img.height);
-    try std.testing.expectEqual(2.0, img.aspectRatio());
-    try std.testing.expectEqual(400, img2.width);
-    try std.testing.expectEqual(400, img2.height);
-    try std.testing.expectEqual(1.0, img2.aspectRatio());
-    try std.testing.expectEqual(100, default.width);
-    try std.testing.expectEqual(100, default.height);
-    try std.testing.expectEqual(1.0, default.aspectRatio());
-    try std.testing.expectEqual(1, imgHeightOne.width);
-    try std.testing.expectEqual(1, imgHeightOne.height);
-    try std.testing.expectEqual(1.0, imgHeightOne.aspectRatio());
-    try std.testing.expectEqualStrings(expected, actual);
-}
-
 test "Viewport" {
+    const alloc = std.testing.allocator;
+    const io = std.testing.io;
+
     const vFov: f64 = 90;
     const height: f64 = 2.0 * @tan(degToRad(vFov) / 2.0) * 2.0;
     const vp = Viewport{ .width = 16.0, .height = height, .vFov = vFov };
     const aspectRatio = @as(f64, @floatFromInt(16)) / @as(f64, @floatFromInt(9));
     const imgRatio: f64 = @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225));
-    const img = Image.init(400, aspectRatio);
+
+    var img = Image.init(alloc, io, 400, aspectRatio);
+    defer img.deinit();
+
     const vp2 = Viewport.init(img, vFov, 2.0);
     const expected = "16.00x4.00 @ 90";
 
@@ -385,13 +338,13 @@ test "Viewport" {
 }
 
 test "CameraBuilder" {
-    const io = std.testing.io;
     const alloc = std.testing.allocator;
+    const io = std.testing.io;
 
-    const prng = initTestPrng(alloc, io);
-    defer alloc.destroy(prng);
+    var image = Image.init(alloc, io, 400, (16.0 / 9.0));
+    defer image.deinit();
 
-    var builder = Camera.builder(alloc, io, prng, 400, (16.0 / 9.0));
+    var builder = Camera.builder(alloc, io, image);
 
     try std.testing.expectEqual(defaultCameraCenter, builder.center);
     try std.testing.expectEqual(defaultLookFrom, builder.lookFrom);
@@ -406,7 +359,7 @@ test "CameraBuilder" {
 
     const vFov = 90;
 
-    const scene = Scene.init(alloc);
+    const scene = Scene.init(alloc, io);
     builder = builder.setScene(scene);
     try std.testing.expectEqualDeep(scene, builder.scene);
 
@@ -464,18 +417,15 @@ test "Camera" {
     const cameraUpperLeft = cameraCenter - Vec3{ 0, 0, 2.0 } - Vec.divScalar(cameraVu, 2) - Vec.divScalar(cameraVv, 2);
     const height: f64 = 2.0 * @tan(degToRad(vFov) / 2.0);
 
-    const scene = Scene.init(alloc);
+    const scene = Scene.init(alloc, io);
 
-    const prng = initTestPrng(alloc, io);
-    defer alloc.destroy(prng);
+    var image = Image.init(alloc, io, 800, 2.0);
+    defer image.deinit();
 
     var camera = Camera{
+        .alloc = alloc,
         .io = io,
-        .prng = prng,
-        .image = .{
-            .width = 800,
-            .height = 400,
-        },
+        .image = image,
         .viewport = .{
             .width = 4.0,
             .height = 2.0,
@@ -492,10 +442,10 @@ test "Camera" {
         .pixelSamplesScale = defaultPixelSamplesScale,
     };
 
-    const prng2 = initTestPrng(alloc, io);
-    defer alloc.destroy(prng2);
+    var image2 = Image.init(alloc, io, 400, (16.0 / 9.0));
+    defer image2.deinit();
 
-    var init = Camera.builder(alloc, io, prng2, 400, (16.0 / 9.0))
+    var init = Camera.builder(alloc, io, image2)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
 
@@ -548,13 +498,16 @@ test "Camera.sampleSquare()" {
     const prng = initTestPrng(alloc, io);
     defer alloc.destroy(prng);
 
-    var camera = Camera.builder(alloc, io, prng, 400, 1.0)
+    var image = Image.init(alloc, io, 400, 1.0);
+    defer image.deinit();
+
+    var camera = Camera.builder(alloc, io, image)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
 
     const tests = 10;
     for (0..tests) |_| {
-        const sample = camera.sampleSquare();
+        const sample = camera.sampleSquare(prng);
         try std.testing.expect(-0.5 <= sample[0] and sample[0] <= 0.5);
         try std.testing.expect(-0.5 <= sample[1] and sample[1] <= 0.5);
         try std.testing.expectEqual(0, sample[2]);
@@ -568,13 +521,16 @@ test "Camera.defocusDiskSample()" {
     const prng = initTestPrng(alloc, io);
     defer alloc.destroy(prng);
 
-    var camera = Camera.builder(alloc, io, prng, 400, 1.0)
+    var image = Image.init(alloc, io, 400, 1.0);
+    defer image.deinit();
+
+    var camera = Camera.builder(alloc, io, image)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
 
     const tests = 10;
     for (0..tests) |_| {
-        const sample = camera.defocusDiskSample();
+        const sample = camera.defocusDiskSample(prng);
         try std.testing.expect(-1 <= sample[0] and sample[0] <= 1);
         try std.testing.expect(-1 <= sample[1] and sample[1] <= 1);
         try std.testing.expectEqual(0, sample[2]);
