@@ -24,6 +24,11 @@ pub fn main(init: std.process.Init) !void {
     var scene = Scene.init(alloc, io);
     defer scene.deinit();
     scene.generateWorld(config.seed);
+
+    // Create threaded Io
+    var threaded = std.Io.Threaded.init(alloc, .{});
+    defer threaded.deinit();
+
     // Create Image
     var image = Image.init(gpa, io, config.imgWidth, config.aspectRatio);
     defer image.deinit();

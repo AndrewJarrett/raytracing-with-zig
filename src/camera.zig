@@ -89,25 +89,68 @@ pub const Camera = struct {
         return builderPtr;
     }
 
-    pub fn render(self: Camera, alloc: Allocator) !void {
+    pub fn render(self: Camera, seed: ?u64) !void {
         const width = self.image.width;
         const height = self.image.height;
 
-        for (0..ppm.height) |j| {
-            std.log.info("\rScanlines remaining: {d} ", .{ppm.height - j});
-            for (0..ppm.width) |i| {
-                var pixelColor = black;
-                // Anti-aliasing sampling
-                for (0..self.samplesPerPixel) |_| {
-                    const ray = self.getRay(i, j);
-                    pixelColor += self.rayColor(ray);
-                }
-                const avgColor = Color.fromVec(Vec.mulScalar(pixelColor, self.pixelSamplesScale));
-                ppm.pixels[i + j * ppm.width] = avgColor;
-            }
+        // Create thread pool
+        var group = Io.Group.init;
+        defer group.cancel(self.io);
+
+        const numCpus = std.Thread.getCpuCount() catch unreachable;
+        const rows = height / numCpus;
+
+        for (0..numCpus) |t| {
+            const startRow = t * rows;
+            const endRow = if (t + 1 >= numCpus) height else (t + 1) * rows;
+            const start = startRow * width;
+            const end = endRow * width;
+            const slice = self.image.pixels[start..end];
+
+            group.async(self.io, renderRow, .{ self, seed, startRow, endRow, slice });
         }
+        try group.await(self.io);
+
         std.log.info("\rDone.\n", .{});
 
+        // Save the file
+        try self.image.savePpmBinary("images/" ++ config.fileName);
+    }
+
+    fn renderRow(self: Camera, seed: ?u64, startRow: usize, endRow: usize, slice: []Color) void {
+        const height = self.image.height;
+        const width = self.image.width;
+
+        // Create thread local RNG
+        const prng: *DefaultPrng = self.alloc.create(DefaultPrng) catch unreachable;
+        defer self.alloc.destroy(prng);
+        prng.* = DefaultPrng.init(blk: {
+            if (seed) |s| {
+                break :blk s;
+            } else {
+                var s: u64 = undefined;
+                self.io.random(std.mem.asBytes(&s));
+                break :blk s;
+            }
+        });
+
+        for (startRow..endRow) |globalRow| {
+            const localRow = globalRow - startRow;
+            std.log.info("\rScanlines remaining: {d} ", .{height - globalRow});
+
+            for (0..width) |col| {
+                var pixelColor = black;
+
+                // Anti-aliasing sampling
+                for (0..self.samplesPerPixel) |_| {
+                    const ray = self.getRay(col, globalRow, prng);
+                    pixelColor += self.rayColor(ray);
+                }
+
+                const avgColor = Color.fromVec(Vec.mulScalar(pixelColor, self.pixelSamplesScale));
+                slice[col + localRow * width] = avgColor;
+            }
+        }
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
