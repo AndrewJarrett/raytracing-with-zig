@@ -16,29 +16,29 @@ const inf = std.math.inf(f64);
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const gpa = init.gpa;
-
-    defer init.arena.deinit();
     const alloc = init.arena.allocator();
 
     // Use or generate a common seed
     const seed = initSeed(io);
+    std.log.info("Using seed: 0x{x}", .{ seed });
 
     // Generate the random scene
-    var scene = Scene.init(alloc, io);
+    var scene = Scene.init(gpa, io);
     defer scene.deinit();
     scene.generateWorld(seed);
 
     // Create threaded Io
-    var threaded = std.Io.Threaded.init(alloc, .{});
+    var threaded = std.Io.Threaded.init(gpa, .{});
     defer threaded.deinit();
 
     // Create Image
-    var image = Image.init(gpa, io, config.imgWidth, config.aspectRatio);
+    var image = Image.init(alloc, io, config.imgWidth, config.aspectRatio);
     defer image.deinit();
+    std.log.info("Rendering image: {f}", .{ image });
 
     // Camera / render
-    var camera = initCamera(alloc, threaded.io(), image, scene);
-    try camera.render(seed);
+    var camera = initCamera(gpa, threaded.io(), image, seed, scene);
+    try camera.render(alloc);
 }
 
 fn initSeed(io: Io) u64 {
@@ -55,23 +55,9 @@ fn initSeed(io: Io) u64 {
     return seed;
 }
 
-fn initPrng(alloc: Allocator, io: Io, seed: ?u64) *DefaultPrng {
-    const prng: *DefaultPrng = alloc.create(DefaultPrng) catch unreachable;
-    prng.* = DefaultPrng.init(blk: {
-        if (seed) |s| {
-            break :blk s;
-        } else {
-            var s: u64 = undefined;
-            io.random(std.mem.asBytes(&s));
-            break :blk s;
-        }
-    });
-    return prng;
-}
-
-fn initCamera(alloc: Allocator, io: Io, image: Image, scene: Scene) Camera {
+fn initCamera(alloc: Allocator, io: Io, image: Image, seed: u64, scene: Scene) Camera {
     // Builv Camera
-    return Camera.builder(alloc, io, image)
+    return Camera.builder(alloc, io, image, seed)
         .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
@@ -84,6 +70,8 @@ fn initCamera(alloc: Allocator, io: Io, image: Image, scene: Scene) Camera {
 // image being built.  We will compare the expected and actual image since the
 // result will be the same every time.
 test "main" {
+    //std.testing.log_level = .info;
+
     try std.testing.expect(config.imgWidth == 400);
     try std.testing.expect(config.aspectRatio == (16.0 / 9.0));
     try std.testing.expect(config.samplesPerPixel == 10);
@@ -105,8 +93,9 @@ test "main" {
     defer image.deinit();
 
     // Camera
-    var camera = initCamera(gpa, io, image, scene);
-    try camera.render(seed);
+    var camera = initCamera(gpa, io, image, seed, scene);
+    try camera.render(gpa);
+    defer camera.deinit(gpa);
 
     const expected = try std.Io.Dir.cwd().readFileAlloc(io, "test-files/" ++ config.fileName, gpa, Io.Limit.limited(5e5));
     defer gpa.free(expected);
