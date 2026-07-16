@@ -18,21 +18,27 @@ const Self = @This();
 alloc: Allocator,
 io: Io,
 world: HittableList,
+prng: *DefaultPrng,
 interval: Interval = Interval.init(1e-3, inf), // Default - edit field directly if needed
 
-pub fn init(allocator: Allocator, io: Io) Self {
+pub fn init(alloc: Allocator, io: Io, seed: u64) Self {
+    const prng = alloc.create(DefaultPrng) catch unreachable;
+    prng.* = DefaultPrng.init(seed);
+
     return .{
-        .alloc = allocator,
+        .alloc = alloc,
         .io = io,
         .world = HittableList.init(),
+        .prng = prng,
     };
 }
 
-pub fn generateWorld(self: *Self, seed: u64) void {
-    // Create temporary RNG based on optional seed
-    const prng = self.alloc.create(DefaultPrng) catch unreachable;
-    defer self.alloc.destroy(prng);
-    prng.* = DefaultPrng.init(seed);
+pub fn deinit(self: *Self) void {
+    self.world.deinit(self.alloc);
+    self.alloc.destroy(self.prng);
+}
+
+pub fn generateWorld(self: *Self) void {
 
     // Materials and objects
     // Ground
@@ -52,11 +58,11 @@ pub fn generateWorld(self: *Self, seed: u64) void {
         for (0..22) |b| {
             const zOffset: f64 = @as(f64, @floatFromInt(b)) - 11;
 
-            const chooseMat = util.randomDouble(prng);
+            const chooseMat = util.randomDouble(self.prng);
             const center = Point3{
-                xOffset + 0.9 * util.randomDouble(prng),
+                xOffset + 0.9 * util.randomDouble(self.prng),
                 0.2,
-                zOffset + 0.9 * util.randomDouble(prng),
+                zOffset + 0.9 * util.randomDouble(self.prng),
             };
 
             if (Vec.len(center - Point3{ 4, 0.2, 0 }) > 0.9) {
@@ -67,14 +73,14 @@ pub fn generateWorld(self: *Self, seed: u64) void {
 
                 if (chooseMat < 0.8) {
                     // 80% is diffuse material
-                    const albedo = Vec.random(prng) * Vec.random(prng);
+                    const albedo = Vec.random(self.prng) * Vec.random(self.prng);
                     sphereMaterial = Material.init(.lambertian, .{
                         .albedo = albedo,
                     });
                 } else if (chooseMat < 0.95) {
                     // 15% metal
-                    const albedo = Vec.randomRange(0.5, 1, prng);
-                    const fuzz = util.randomDoubleRange(0, 0.5, prng);
+                    const albedo = Vec.randomRange(0.5, 1, self.prng);
+                    const fuzz = util.randomDoubleRange(0, 0.5, self.prng);
                     sphereMaterial = Material.init(.metal, .{
                         .albedo = albedo,
                         .fuzz = fuzz,
@@ -166,14 +172,10 @@ pub fn generateChapter13(self: *Self) void {
     ));
 }
 
-pub fn deinit(self: *Self) void {
-    self.world.deinit(self.alloc);
-}
-
 test "Scene" {
     const seed = 0xabadcafe;
 
-    var scene = Self.init(std.testing.allocator, std.testing.io);
+    var scene = Self.init(std.testing.allocator, std.testing.io, seed);
     defer scene.deinit();
 
     // The world should be empty
@@ -181,7 +183,7 @@ test "Scene" {
     try std.testing.expectEqualDeep(Interval.init(1e-3, inf), scene.interval);
 
     // Generate the world now
-    scene.generateWorld(seed);
+    scene.generateWorld();
 
     // Should contain the ground, 3 big balls, and 22*22 little balls
     // Subtract any that don't meet the criteria (3 for this seed)

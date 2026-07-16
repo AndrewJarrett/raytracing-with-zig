@@ -22,43 +22,32 @@ pub fn main(init: std.process.Init) !void {
     const seed = initSeed(io);
     std.log.info("Using seed: 0x{x}", .{ seed });
 
-    // Generate the random scene
-    var scene = Scene.init(gpa, io);
-    defer scene.deinit();
-    scene.generateWorld(seed);
-
     // Create threaded Io
     var threaded = std.Io.Threaded.init(gpa, .{});
     defer threaded.deinit();
 
     // Create Image
-    var image = Image.init(alloc, io, config.imgWidth, config.aspectRatio);
-    defer image.deinit();
+    const image = Image.init(alloc, io, config.imgWidth, config.aspectRatio);
     std.log.info("Rendering image: {f}", .{ image });
 
     // Camera / render
-    var camera = initCamera(gpa, threaded.io(), image, seed, scene);
-    try camera.render(alloc);
+    var camera = initCamera(alloc, threaded.io(), image, seed);
+    try camera.render();
 }
 
-fn initSeed(io: Io) u64 {
-    var seed: u64 = undefined;
-
+inline fn initSeed(io: Io) u64 {
     if (config.seed) |s| {
-        seed = s;
+        return s;
     } else {
         var s: u64 = undefined;
         io.random(std.mem.asBytes(&s));
-        seed = s;
+        return s;
     }
-
-    return seed;
 }
 
-fn initCamera(alloc: Allocator, io: Io, image: Image, seed: u64, scene: Scene) Camera {
+inline fn initCamera(alloc: Allocator, io: Io, image: Image, seed: u64) Camera {
     // Builv Camera
     return Camera.builder(alloc, io, image, seed)
-        .setScene(scene)
         .setDefocusAngle(0.6)
         .setFocusDist(10)
         .setViewport(Point3{ 13, 2, 3 }, Point3{ 0, 0, 0 }, 20)
@@ -84,18 +73,13 @@ test "main" {
     // Use or generate a common seed
     const seed = initSeed(io);
 
-    // Generate the random scene
-    var scene = Scene.init(gpa, io);
-    defer scene.deinit();
-    scene.generateWorld(seed);
-
     var image = Image.init(gpa, io, config.imgWidth, config.aspectRatio);
     defer image.deinit();
 
     // Camera
-    var camera = initCamera(gpa, io, image, seed, scene);
-    try camera.render(gpa);
-    defer camera.deinit(gpa);
+    var camera = initCamera(gpa, io, image, seed);
+    try camera.render();
+    defer camera.deinit();
 
     const expected = try std.Io.Dir.cwd().readFileAlloc(io, "test-files/" ++ config.fileName, gpa, Io.Limit.limited(5e5));
     defer gpa.free(expected);

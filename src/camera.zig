@@ -54,11 +54,10 @@ const Viewport = struct {
 const RenderContext = struct {
     threadNum: usize,
     prng: *DefaultPrng,
-    nextRow: *std.atomic.Value(usize),
-    chunkSize: usize,
 };
 
 pub const Camera = struct {
+    alloc: Allocator,
     io: Io,
     image: Image,
     seed: u64,
@@ -85,6 +84,12 @@ pub const Camera = struct {
     // Thread-local RNGs that need to be deinited
     prngs: ArrayList(*DefaultPrng),
 
+    // Atomic Value to keep track of the nextRow to pull off a chunk for multi-threaded rendering
+    nextRow: *Value(usize),
+
+    // Configurable chunk size - smaller is more balanced, but bigger may be slightly faster
+    chunkSize: usize,
+
     /// Provide an allocator, an Io implementation (ideally a Threaded.Io), and a Image (which contains
     /// the width of the image and an aspect ratio) in order to setup a Camera.
     /// Uses the Builder pattern to construct a correct Camera. Do not set fields manually unless
@@ -102,14 +107,18 @@ pub const Camera = struct {
         return builderPtr;
     }
 
-    pub fn deinit(self: *Camera, gpa: Allocator) void {
+    pub fn deinit(self: *Camera) void {
         for (self.prngs.items) |item| {
-            gpa.destroy(item);
+            self.alloc.destroy(item);
         }
-        self.prngs.deinit(gpa);
+        self.prngs.deinit(self.alloc);
+
+        self.alloc.destroy(self.nextRow);
+        
+        self.scene.deinit();
     }
 
-    pub fn render(self: *Camera, alloc: Allocator) !void {
+    pub fn render(self: *Camera) !void {
         // Create thread pool
         var group = Io.Group.init;
         defer group.cancel(self.io);
@@ -118,24 +127,19 @@ pub const Camera = struct {
         std.log.info("Processing with {} threads.", .{ numCpus });
 
         // Initialize numCpu number of RNGs to have one per thread
-        self.prngs = ArrayList(*DefaultPrng).initCapacity(alloc, numCpus) catch unreachable;
-
-        // Use an atomic "next row" counter
-        const nextRow: *Value(usize) = alloc.create(Value(usize)) catch unreachable;
-        nextRow.* = Value(usize).init(0);
-        defer alloc.destroy(nextRow);
-        const chunkSize = 4;
+        self.prngs = ArrayList(*DefaultPrng).initCapacity(self.alloc, numCpus) catch unreachable;
 
         for (0..numCpus) |t| {
             // Create thread local RNG
-            const prng: *DefaultPrng = alloc.create(DefaultPrng) catch unreachable;
+            const prng: *DefaultPrng = self.alloc.create(DefaultPrng) catch unreachable;
             prng.* = DefaultPrng.init(self.seed);
-            try self.prngs.append(alloc, prng);
+            try self.prngs.append(self.alloc, prng);
 
-            const ctx: *RenderContext = alloc.create(RenderContext) catch unreachable;
-            ctx.* = .{ .threadNum = t, .prng = prng, .nextRow = nextRow, .chunkSize = chunkSize };
+            //const ctx: *RenderContext = self.alloc.create(RenderContext) catch unreachable;
+            //ctx.* = .{ .threadNum = t, .prng = prng };
+            //const ctx = .{ .threadNum = t, .prng = prng };
 
-            group.async(self.io, renderRow, .{ self, ctx });
+            group.async(self.io, renderRow, .{ self, t,  prng });
         }
         try group.await(self.io);
 
@@ -145,17 +149,17 @@ pub const Camera = struct {
         try self.image.savePpmBinary("images/" ++ config.fileName);
     }
 
-    fn renderRow(self: *Camera, ctx: *RenderContext) void {
+    fn renderRow(self: *Camera, threadNum: usize, prng: *DefaultPrng) void {
         const width = self.image.width;
         const height = self.image.height;
 
         while (true) {
-            const startRow = ctx.nextRow.fetchAdd(ctx.chunkSize, .monotonic);
+            const startRow = self.nextRow.fetchAdd(self.chunkSize, .monotonic);
             if (startRow >= height) break;
 
-            const percentComplete: f32 = @as(f32, @floatFromInt(startRow - ctx.chunkSize)) / @as(f32, @floatFromInt(height)) * 100.0;
-            std.log.info("Thread {d}: {d}/{d} rows, {d:.2}% complete.", .{ ctx.threadNum + 1, (startRow - ctx.chunkSize), height, percentComplete });
-            const endRow = @min(startRow + ctx.chunkSize, height);
+            const percentComplete: f32 = @as(f32, @floatFromInt(startRow)) / @as(f32, @floatFromInt(height)) * 100.0;
+            std.log.info("Thread {d}: {d}/{d} rows, {d:.2}% complete.", .{ threadNum + 1, startRow, height, percentComplete });
+            const endRow = @min(startRow + self.chunkSize, height);
 
             const start = startRow * width;
             const end = endRow * width;
@@ -169,7 +173,7 @@ pub const Camera = struct {
 
                     // Anti-aliasing sampling
                     for (0..self.samplesPerPixel) |_| {
-                        const ray = self.getRay(col, globalRow, ctx.prng);
+                        const ray = self.getRay(col, globalRow, prng);
                         pixelColor += self.rayColor(ray);
                     }
 
@@ -178,7 +182,7 @@ pub const Camera = struct {
                 }
             }
         }
-        std.log.info("Thread {d}: -----[DONE (idle)]-----", .{ ctx.threadNum + 1 });
+        std.log.info("Thread {d}: -----[DONE (idle)]-----", .{ threadNum + 1 });
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
@@ -343,6 +347,16 @@ pub const CameraBuilder = struct {
         // Make sure we free the builder when done
         defer self.alloc.destroy(self);
 
+        const scene = blk: {
+            if (self.scene) |s| {
+                break :blk s;
+            } else {
+                var s = Scene.init(self.alloc, self.io, self.seed);
+                s.generateWorld();
+                break :blk s;
+            }
+        };
+
         const w = Vec.unit(self.lookFrom.? - self.lookAt.?);
         const u = Vec.unit(Vec.cross(self.vUp.?, w));
         const v = Vec.cross(w, u);
@@ -356,11 +370,16 @@ pub const CameraBuilder = struct {
 
         const defocusRadius = self.focusDist.? * @tan(degToRad(self.defocusAngle.? / 2.0));
 
+        // Use an atomic "next row" counter for the multi-threaded rendering
+        const nextRow: *Value(usize) = self.alloc.create(Value(usize)) catch unreachable;
+        nextRow.* = Value(usize).init(0);
+
         return .{
+            .alloc = self.alloc,
             .io = self.io,
             .image = self.image,
             .seed = self.seed,
-            .scene = if (self.scene) |s| s else Scene.init(self.alloc, self.io),
+            .scene = scene,
             .viewport = self.viewport.?,
             .samplesPerPixel = self.samplesPerPixel.?,
             .pixelSamplesScale = self.pixelSamplesScale.?,
@@ -380,6 +399,8 @@ pub const CameraBuilder = struct {
             .dv = dv,
             .pixel0 = viewportUpperLeft + Vec.mulScalar((du + dv), 0.5),
             .prngs = .empty,
+            .nextRow = nextRow,
+            .chunkSize = config.chunkSize,
         };
     }
 };
@@ -432,7 +453,7 @@ test "CameraBuilder" {
 
     const vFov = 90;
 
-    const scene = Scene.init(alloc, io);
+    const scene = Scene.init(alloc, io, 0xdeadbeef);
     builder = builder.setScene(scene);
     try std.testing.expectEqualDeep(scene, builder.scene);
 
@@ -459,7 +480,8 @@ test "CameraBuilder" {
     try std.testing.expectEqual(10, builder.samplesPerPixel);
     try std.testing.expectEqual(1 / @as(f64, @floatFromInt(10)), builder.pixelSamplesScale);
 
-    const camera = builder.build();
+    var camera = builder.build();
+    defer camera.deinit();
 
     try std.testing.expectEqual(defaultU, camera.u);
     try std.testing.expectEqual(defaultV, camera.v);
@@ -490,13 +512,19 @@ test "Camera" {
     const cameraUpperLeft = cameraCenter - Vec3{ 0, 0, 2.0 } - Vec.divScalar(cameraVu, 2) - Vec.divScalar(cameraVv, 2);
     const height: f64 = 2.0 * @tan(degToRad(vFov) / 2.0);
 
-    const scene = Scene.init(alloc, io);
     const seed = 0xdeadbeef;
+    var scene = Scene.init(alloc, io, seed);
+    defer scene.deinit();
 
     var image = Image.init(alloc, io, 800, 2.0);
     defer image.deinit();
 
+    const nextRow = alloc.create(Value(usize)) catch unreachable;
+    nextRow.* = Value(usize).init(0);
+    defer alloc.destroy(nextRow);
+
     var camera = Camera{
+        .alloc = alloc,
         .io = io,
         .seed = seed,
         .image = image,
@@ -515,6 +543,8 @@ test "Camera" {
         .samplesPerPixel = defaultSamplesPerPixel,
         .pixelSamplesScale = defaultPixelSamplesScale,
         .prngs = .empty,
+        .nextRow = nextRow,
+        .chunkSize = config.chunkSize,
     };
 
     var image2 = Image.init(alloc, io, 400, (16.0 / 9.0));
@@ -523,6 +553,7 @@ test "Camera" {
     var init = Camera.builder(alloc, io, image2, seed)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
+    defer init.deinit();
 
     try std.testing.expectEqual(defaultFocusDist, camera.focusDist);
     try std.testing.expectEqual(800, camera.image.width);
@@ -579,6 +610,7 @@ test "Camera.sampleSquare()" {
     var camera = Camera.builder(alloc, io, image, 0xdeadbeef)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
+    defer camera.deinit();
 
     const tests = 10;
     for (0..tests) |_| {
@@ -602,6 +634,7 @@ test "Camera.defocusDiskSample()" {
     var camera = Camera.builder(alloc, io, image, 0xdeadbeef)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
+    defer camera.deinit();
 
     const tests = 10;
     for (0..tests) |_| {
