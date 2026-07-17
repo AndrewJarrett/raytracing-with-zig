@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const DefaultPrng = std.Random.DefaultPrng;
+const SplitMix64 = std.Random.SplitMix64;
 const ArrayList = std.ArrayList;
 const Value = std.atomic.Value;
 const degToRad = std.math.degreesToRadians;
@@ -51,11 +52,6 @@ const Viewport = struct {
     }
 };
 
-const RenderContext = struct {
-    threadNum: usize,
-    prng: *DefaultPrng,
-};
-
 pub const Camera = struct {
     alloc: Allocator,
     io: Io,
@@ -81,9 +77,6 @@ pub const Camera = struct {
     dv: Vec3, // Offset to pixel below
     pixel0: Point3, // Location of pixel (0, 0)
 
-    // Thread-local RNGs that need to be deinited
-    prngs: ArrayList(*DefaultPrng),
-
     // Atomic Value to keep track of the nextRow to pull off a chunk for multi-threaded rendering
     nextRow: *Value(usize),
 
@@ -108,13 +101,7 @@ pub const Camera = struct {
     }
 
     pub fn deinit(self: *Camera) void {
-        for (self.prngs.items) |item| {
-            self.alloc.destroy(item);
-        }
-        self.prngs.deinit(self.alloc);
-
         self.alloc.destroy(self.nextRow);
-        
         self.scene.deinit();
     }
 
@@ -126,20 +113,8 @@ pub const Camera = struct {
         const numCpus = std.Thread.getCpuCount() catch 1;
         std.log.info("Processing with {} threads.", .{ numCpus });
 
-        // Initialize numCpu number of RNGs to have one per thread
-        self.prngs = ArrayList(*DefaultPrng).initCapacity(self.alloc, numCpus) catch unreachable;
-
         for (0..numCpus) |t| {
-            // Create thread local RNG
-            const prng: *DefaultPrng = self.alloc.create(DefaultPrng) catch unreachable;
-            prng.* = DefaultPrng.init(self.seed);
-            try self.prngs.append(self.alloc, prng);
-
-            //const ctx: *RenderContext = self.alloc.create(RenderContext) catch unreachable;
-            //ctx.* = .{ .threadNum = t, .prng = prng };
-            //const ctx = .{ .threadNum = t, .prng = prng };
-
-            group.async(self.io, renderRow, .{ self, t,  prng });
+            group.async(self.io, renderRow, .{ self, t });
         }
         try group.await(self.io);
 
@@ -149,7 +124,7 @@ pub const Camera = struct {
         try self.image.savePpmBinary("images/" ++ config.fileName);
     }
 
-    fn renderRow(self: *Camera, threadNum: usize, prng: *DefaultPrng) void {
+    fn renderRow(self: *Camera, threadNum: usize) void {
         const width = self.image.width;
         const height = self.image.height;
 
@@ -168,12 +143,16 @@ pub const Camera = struct {
             for (startRow..endRow) |globalRow| {
                 const localRow = globalRow - startRow;
 
+                // Create thread local RNG with deterministic, but unique seed per row
+                var splitMix64 = SplitMix64.init(self.seed +% @as(u64, @intCast(globalRow)));
+                var prng = DefaultPrng.init(splitMix64.next());
+
                 for (0..width) |col| {
                     var pixelColor = black;
 
                     // Anti-aliasing sampling
                     for (0..self.samplesPerPixel) |_| {
-                        const ray = self.getRay(col, globalRow, prng);
+                        const ray = self.getRay(col, globalRow, &prng);
                         pixelColor += self.rayColor(ray);
                     }
 
@@ -398,7 +377,6 @@ pub const CameraBuilder = struct {
             .du = du,
             .dv = dv,
             .pixel0 = viewportUpperLeft + Vec.mulScalar((du + dv), 0.5),
-            .prngs = .empty,
             .nextRow = nextRow,
             .chunkSize = config.chunkSize,
         };
@@ -542,7 +520,6 @@ test "Camera" {
         .focusDist = defaultFocusDist,
         .samplesPerPixel = defaultSamplesPerPixel,
         .pixelSamplesScale = defaultPixelSamplesScale,
-        .prngs = .empty,
         .nextRow = nextRow,
         .chunkSize = config.chunkSize,
     };
