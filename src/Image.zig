@@ -2,47 +2,33 @@ const std = @import("std");
 const Color = @import("color.zig").Color;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const assert = std.debug.assert;
 
 const Self = @This();
 
-alloc: Allocator,
-io: Io,
-width: usize,
-height: usize,
+width: u16,
+height: u16,
 pixels: []Color,
 
-/// The preferred method of initialization is through the Camera struct and only
-/// needs to be provided with the width of the image and the aspectRatio. The height
-/// Interval.init(1e-3, inf)will be calculated automatically based on the width of the image and the aspectRatio.
-pub fn init(alloc: Allocator, io: Io, width: usize, ratio: f64) Self {
-    const height: usize = @intFromFloat(@as(f64, @floatFromInt(width)) / ratio);
-
-    return .{
-        .alloc = alloc,
-        .io = io,
-        .width = width,
-        .height = if (height < 1) 1 else height,
-        .pixels = alloc.alloc(Color, width * height) catch unreachable,
-    };
-}
-
-pub fn deinit(self: *Self) void {
-    self.alloc.free(self.pixels);
+// Use to determine the height for an image given a width and aspect ratio
+pub inline fn getHeightFromWidthAndRatio(comptime width: u16, comptime ratio: f64) u16 {
+    return @intFromFloat(@as(f64, @floatFromInt(width)) / ratio);
 }
 
 /// We don't need to store this as a separate struct field. It can be calculated if it is
 /// ever needed after creation of the struct
 pub fn aspectRatio(self: Self) f64 {
+    assert(self.height >= 1);
     return @as(f64, @floatFromInt(self.width)) / @as(f64, @floatFromInt(self.height));
 }
 
 /// Saves the pixels which contains the image information into the PPM specific format.
-pub fn savePpm(self: Self, filename: []const u8) !void {
-    var file = try std.Io.Dir.cwd().createFile(self.io, filename, .{});
-    defer file.close(self.io);
+pub fn savePpm(self: Self, io: Io, filename: []const u8) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, filename, .{});
+    defer file.close(io);
 
     var buf: [2048]u8 = undefined;
-    var fileWriter = file.writer(self.io, &buf);
+    var fileWriter = file.writer(io, &buf);
     const writer: *std.Io.Writer = &fileWriter.interface;
 
     _ = try writer.print("P3\n{d} {d}\n255\n", .{ self.width, self.height });
@@ -55,12 +41,12 @@ pub fn savePpm(self: Self, filename: []const u8) !void {
 }
 
 // Saves the PPM in binary format
-pub fn savePpmBinary(self: Self, filename: []const u8) !void {
-    var file = try std.Io.Dir.cwd().createFile(self.io, filename, .{});
-    defer file.close(self.io);
+pub fn savePpmBinary(self: Self, io: Io, filename: []const u8) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, filename, .{});
+    defer file.close(io);
 
     var buf: [2048]u8 = undefined;
-    var fileWriter = file.writer(self.io, &buf);
+    var fileWriter = file.writer(io, &buf);
     const writer: *std.Io.Writer = &fileWriter.interface;
 
     _ = try writer.print("P6\n{d} {d}\n255\n", .{ self.width, self.height });
@@ -80,32 +66,33 @@ pub fn format(self: Self, writer: anytype) !void {
     try writer.print("{d}x{d} ({d})", .{ self.width, self.height, self.aspectRatio() });
 }
 
-test "init()" {
+test "struct" {
     const alloc = std.testing.allocator;
-    const io = std.testing.io;
 
-    var image = Self.init(alloc, io, 256, 0.5);
-    defer image.deinit();
+    const pixels = try alloc.alloc(Color, 256*512);
+    defer alloc.free(pixels);
+    var image = Self{ .width = 256, .height = 512, .pixels = pixels };
 
     try std.testing.expectEqual(256, image.width);
     try std.testing.expectEqual(512, image.height);
     try std.testing.expectEqual(0.5, image.aspectRatio());
-    try std.testing.expectEqual((image.width * image.height), image.pixels.len);
+    try std.testing.expectEqual((@as(u32, image.width) * @as(u32, image.height)), image.pixels.len);
 }
 
 test "Image" {
     const alloc = std.testing.allocator;
-    const io = std.testing.io;
 
-    const pixels = alloc.alloc(Color, 800 * 400) catch unreachable;
-    var img = Self{ .alloc = alloc, .io = io, .width = 800, .height = 400, .pixels = pixels };
-    defer img.deinit();
+    const pixels = try alloc.alloc(Color, 800 * 400);
+    defer alloc.free(pixels);
+    var img = Self{ .width = 800, .height = 400, .pixels = pixels };
 
-    var img2 = Self.init(alloc, io, 400, 1.0);
-    defer img2.deinit();
+    const pixels2 = try alloc.alloc(Color, 400 * 400);
+    defer alloc.free(pixels2);
+    var img2 = Self{ .width = 400, .height = 400, .pixels = pixels2 };
 
-    var imgHeightOne = Self.init(alloc, io, 1, 2.0);
-    defer imgHeightOne.deinit();
+    const pixels3 = try alloc.alloc(Color, 1 * 1);
+    defer alloc.free(pixels3);
+    var imgHeightOne = Self{ .width = 1, .height = 1, .pixels = pixels3 };
 
     const expected = "400x400 (1)";
 
@@ -128,10 +115,11 @@ test "savePpm()" {
     const alloc = std.testing.allocator;
     const io = std.testing.io;
 
-    var image = Self.init(alloc, io, 1, 1);
-    defer image.deinit();
+    const pixels = try alloc.alloc(Color, 1);
+    defer alloc.free(pixels);
+    var image = Self{ .width = 1, .height = 1, .pixels = pixels };
 
-    try image.savePpm("test.ppm");
+    try image.savePpm(io, "test.ppm");
     defer std.Io.Dir.cwd().deleteFile(io, "test.ppm") catch unreachable;
 
     const expected =
@@ -151,10 +139,11 @@ test "savePpmBinary()" {
     const alloc = std.testing.allocator;
     const io = std.testing.io;
 
-    var image = Self.init(alloc, io, 1, 1);
-    defer image.deinit();
+    const pixels = try alloc.alloc(Color, 1);
+    defer alloc.free(pixels);
+    var image = Self{ .width = 1, .height = 1, .pixels = pixels };
 
-    try image.savePpmBinary("test-binary.ppm");
+    try image.savePpmBinary(io, "test-binary.ppm");
     defer std.Io.Dir.cwd().deleteFile(io, "test-binary.ppm") catch unreachable;
 
     const expected = try std.Io.Dir.cwd().readFileAlloc(io, "test-files/test-binary.ppm", alloc, Io.Limit.limited(1024));
