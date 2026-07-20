@@ -1,44 +1,70 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const DefaultPrng = std.Random.DefaultPrng;
-const Io = std.Io;
+const ArrayList = std.ArrayList;
+const assert = std.debug.assert;
 
 const Color3 = @import("color.zig").Color3;
-const Hittable = @import("hittable.zig").Hittable;
-const HittableList = @import("hittable.zig").HittableList;
+const Hit = @import("hittable.zig").Hit;
 const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
+const Object = @import("hittable.zig").Object;
 const Point3 = @import("vec.zig").Point3;
+const Ray = @import("ray.zig").Ray;
 const util = @import("util.zig");
 const Vec = @import("vec.zig").Vec;
+const Vec3 = @import("vec.zig").Vec3;
 
 const inf = std.math.inf(f64);
 
 const Self = @This();
-alloc: Allocator,
-io: Io,
-world: HittableList,
-prng: *DefaultPrng,
+seed: u64,
+world: []Object,
+len: u16 = 0,
 interval: Interval = Interval.init(1e-3, inf), // Default - edit field directly if needed
 
-pub fn init(alloc: Allocator, io: Io, seed: u64) Self {
-    const prng = alloc.create(DefaultPrng) catch unreachable;
-    prng.* = DefaultPrng.init(seed);
+// The enum value is the size of the scene (number of objects)
+pub const SceneType = enum(u16) {
+    chapter13 = 5,
+    chapter14 = (1 + 22 * 22 + 3),
+};
 
-    return .{
-        .alloc = alloc,
-        .io = io,
-        .world = HittableList.init(),
-        .prng = prng,
-    };
+pub fn hit(self: Self, ray: Ray, t: Interval) ?Hit {
+    var finalHit: ?Hit = null;
+    var closest = t.max;
+
+    for (self.objects()) |object| {
+        const maybeHit = object.hit(ray, Interval.init(t.min, closest));
+        if (maybeHit) |h| {
+            finalHit = maybeHit;
+            closest = h.t;
+        }
+    }
+
+    return finalHit;
 }
 
-pub fn deinit(self: *Self) void {
-    self.world.deinit(self.alloc);
-    self.alloc.destroy(self.prng);
+fn append(self: *Self, object: Object) void {
+    assert(self.len < self.world.len);
+    self.world[self.len] = object;
+    self.len += 1;
+    return;
 }
 
-pub fn generateWorld(self: *Self) void {
+pub fn objects(self: Self) []Object {
+    return self.world[0..self.len];
+}
+
+pub fn generateScene(self: *Self, comptime sceneType: @EnumLiteral()) void {
+    switch (sceneType) {
+        inline .chapter13 => self.generateChapter13(),
+        inline .chapter14 => self.generateChapter14(),
+        else => return,
+    }
+}
+
+fn generateChapter14(self: *Self) void {
+    var prng = DefaultPrng.init(self.seed);
 
     // Materials and objects
     // Ground
@@ -46,7 +72,7 @@ pub fn generateWorld(self: *Self) void {
         .lambertian,
         .{ .albedo = Color3{ 0.5, 0.5, 0.5 } },
     );
-    self.world.add(self.alloc, Hittable.init(.sphere, .{
+    self.append(Object.init(.sphere, .{
         .center = Point3{ 0, -1000, 0 },
         .radius = 1000,
         .mat = matGround,
@@ -58,11 +84,11 @@ pub fn generateWorld(self: *Self) void {
         for (0..22) |b| {
             const zOffset: f64 = @as(f64, @floatFromInt(b)) - 11;
 
-            const chooseMat = util.randomDouble(self.prng);
+            const chooseMat = util.randomDouble(&prng);
             const center = Point3{
-                xOffset + 0.9 * util.randomDouble(self.prng),
+                xOffset + 0.9 * util.randomDouble(&prng),
                 0.2,
-                zOffset + 0.9 * util.randomDouble(self.prng),
+                zOffset + 0.9 * util.randomDouble(&prng),
             };
 
             if (Vec.len(center - Point3{ 4, 0.2, 0 }) > 0.9) {
@@ -73,21 +99,21 @@ pub fn generateWorld(self: *Self) void {
 
                 if (chooseMat < 0.8) {
                     // 80% is diffuse material
-                    const albedo = Vec.random(self.prng) * Vec.random(self.prng);
+                    const albedo = Vec.random(&prng) * Vec.random(&prng);
                     sphereMaterial = Material.init(.lambertian, .{
                         .albedo = albedo,
                     });
                 } else if (chooseMat < 0.95) {
                     // 15% metal
-                    const albedo = Vec.randomRange(0.5, 1, self.prng);
-                    const fuzz = util.randomDoubleRange(0, 0.5, self.prng);
+                    const albedo = Vec.randomRange(0.5, 1, &prng);
+                    const fuzz = util.randomDoubleRange(0, 0.5, &prng);
                     sphereMaterial = Material.init(.metal, .{
                         .albedo = albedo,
                         .fuzz = fuzz,
                     });
                 }
 
-                self.world.add(self.alloc, Hittable.init(.sphere, .{
+                self.append(Object.init(.sphere, .{
                     .center = center,
                     .radius = 0.2,
                     .mat = sphereMaterial,
@@ -100,7 +126,7 @@ pub fn generateWorld(self: *Self) void {
         .dielectric,
         .{ .refractionIndex = 1.5 },
     );
-    self.world.add(self.alloc, Hittable.init(
+    self.append(Object.init(
         .sphere,
         .{ .center = Point3{ 0, 1, 0 }, .radius = 1, .mat = mat1 },
     ));
@@ -109,7 +135,7 @@ pub fn generateWorld(self: *Self) void {
         .lambertian,
         .{ .albedo = Color3{ 0.4, 0.2, 0.1 } },
     );
-    self.world.add(self.alloc, Hittable.init(
+    self.append(Object.init(
         .sphere,
         .{ .center = Point3{ -4, 1, 0 }, .radius = 1, .mat = mat2 },
     ));
@@ -118,18 +144,18 @@ pub fn generateWorld(self: *Self) void {
         .metal,
         .{ .albedo = Color3{ 0.7, 0.6, 0.5 }, .fuzz = 0 },
     );
-    self.world.add(self.alloc, Hittable.init(
+    self.append(Object.init(
         .sphere,
         .{ .center = Point3{ 4, 1, 0 }, .radius = 1, .mat = mat3 },
     ));
 }
 
-pub fn generateChapter13(self: *Self) void {
+fn generateChapter13(self: *Self) []Object {
     const matGround = Material.init(
         .lambertian,
         .{ .albedo = Color3{ 0.8, 0.8, 0.0 } },
     );
-    self.world.add(self.alloc, Hittable.init(.sphere, .{
+    self.append(Object.init(.sphere, .{
         .center = Point3{ 0, -100.5, -1 },
         .radius = 100,
         .mat = matGround,
@@ -139,7 +165,7 @@ pub fn generateChapter13(self: *Self) void {
         .lambertian,
         .{ .albedo = Color3{ 0.1, 0.2, 0.5 } },
     );
-    self.world.add(self.alloc, Hittable.init(
+    self.append(Object.init(
         .sphere,
         .{ .center = Point3{ 0, 0, -1.2 }, .radius = 0.5, .mat = matCenter },
     ));
@@ -148,7 +174,7 @@ pub fn generateChapter13(self: *Self) void {
         .dielectric,
         .{ .refractionIndex = 1.5 },
     );
-    self.world.add(self.alloc, Hittable.init(
+    self.append(Object.init(
         .sphere,
         .{ .center = Point3{ -1, 0, -1 }, .radius = 0.5, .mat = matLeft },
     ));
@@ -157,7 +183,7 @@ pub fn generateChapter13(self: *Self) void {
         .dielectric,
         .{ .refractionIndex = 1.0 / 1.5 },
     );
-    self.world.add(self.alloc, Hittable.init(
+    self.append(Object.init(
         .sphere,
         .{ .center = Point3{ -1, 0, -1 }, .radius = 0.4, .mat = matBubble },
     ));
@@ -166,26 +192,59 @@ pub fn generateChapter13(self: *Self) void {
         .metal,
         .{ .albedo = Color3{ 0.8, 0.6, 0.2 }, .fuzz = 1 },
     );
-    self.world.add(self.alloc, Hittable.init(
+    self.append(Object.init(
         .sphere,
         .{ .center = Point3{ 1, 0, -1 }, .radius = 0.5, .mat = matRight },
     ));
 }
 
 test "Scene" {
+    const alloc = std.testing.allocator;
     const seed = 0xabadcafe;
 
-    var scene = Self.init(std.testing.allocator, std.testing.io, seed);
-    defer scene.deinit();
+    const size = @intFromEnum(SceneType.chapter14);
+    const world = try alloc.alloc(Object, size);
+    defer alloc.free(world);
 
-    // The world should be empty
-    try std.testing.expectEqual(0, scene.world.objects.items.len);
+    var scene = Self{ .seed = seed, .world = world };
+
+    // At first, the world is empty (but the slice has max length)
+    try std.testing.expectEqual(0, scene.len);
+    try std.testing.expectEqual(size, scene.world.len);
+
+    scene.generateScene(.chapter14);
+
+    // The world should not be empty and should contain all elements
+    try std.testing.expectEqual(size - 3, scene.len);
+    try std.testing.expectEqual(size - 3, scene.objects().len);
     try std.testing.expectEqualDeep(Interval.init(1e-3, inf), scene.interval);
+}
 
-    // Generate the world now
-    scene.generateWorld();
+test "Scene.hit()" {
+    const alloc = std.testing.allocator;
+    const seed = 0xabadcafe;
+    var prng = DefaultPrng.init(seed);
 
-    // Should contain the ground, 3 big balls, and 22*22 little balls
-    // Subtract any that don't meet the criteria (3 for this seed)
-    try std.testing.expectEqual(1 + 3 + (22 * 22) - 3, scene.world.objects.items.len);
+    const mat = Material.init(
+        .lambertian,
+        .{ .albedo = Color3{ 1, 1, 1 }, },
+    );
+
+    const world = try alloc.alloc(Object, 4);
+    defer alloc.free(world);
+
+    var scene = Self{ .seed = seed, .world = world };
+    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -2 }, .radius = 1.0, .mat = mat }));
+    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -3 }, .radius = 1.0, .mat = mat }));
+    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -4 }, .radius = 1.0, .mat = mat }));
+    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -5 }, .radius = 1.0, .mat = mat }));
+
+    const ray: Ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
+    const maybeHit = scene.hit(ray, Interval.init(-6, 6));
+
+    try std.testing.expect(maybeHit != null);
+    try std.testing.expectEqual(1, maybeHit.?.t);
+    try std.testing.expectEqualDeep(ray.at(1), maybeHit.?.point);
+    try std.testing.expectEqualDeep(Vec3{ 0, 0, 1 }, maybeHit.?.normal);
+    try std.testing.expectEqual(true, maybeHit.?.front);
 }
