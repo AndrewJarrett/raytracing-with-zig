@@ -12,13 +12,14 @@ const config = @import("config");
 
 const Color = @import("color.zig").Color;
 const Color3 = @import("color.zig").Color3;
-const HittableList = @import("hittable.zig").HittableList;
 const Image = @import("Image.zig");
 const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
 const Point3 = @import("vec.zig").Point3;
 const Ray = @import("ray.zig").Ray;
 const Scene = @import("Scene.zig");
+const SceneType = @import("Scene.zig").SceneType;
+const Object = @import("hittable.zig").Object;
 const util = @import("util.zig");
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
@@ -53,14 +54,11 @@ const Viewport = struct {
 };
 
 pub const Camera = struct {
-    alloc: Allocator,
-    io: Io,
     image: Image,
-    seed: u64,
     viewport: Viewport,
     scene: Scene,
     center: Point3 = defaultCameraCenter,
-    samplesPerPixel: usize = defaultSamplesPerPixel,
+    samplesPerPixel: u16 = defaultSamplesPerPixel,
     pixelSamplesScale: f64 = defaultPixelSamplesScale,
     bounceMax: usize = defaultBounceMax,
     lookFrom: Point3 = defaultLookFrom,
@@ -77,51 +75,46 @@ pub const Camera = struct {
     dv: Vec3, // Offset to pixel below
     pixel0: Point3, // Location of pixel (0, 0)
 
-    // Atomic Value to keep track of the nextRow to pull off a chunk for multi-threaded rendering
-    nextRow: *Value(usize),
+    // Atomic value for tracking next worker
+    nextRow: Value(u16),
+    lastProgressPercent: Value(u8),
 
     // Configurable chunk size - smaller is more balanced, but bigger may be slightly faster
-    chunkSize: usize,
+    chunkSize: u8,
 
-    /// Provide an allocator, an Io implementation (ideally a Threaded.Io), and a Image (which contains
-    /// the width of the image and an aspect ratio) in order to setup a Camera.
+    /// Provide an Image (which contains the width of the image and an aspect ratio) and a Scene 
+    /// in order to setup a Camera.
     /// Uses the Builder pattern to construct a correct Camera. Do not set fields manually unless
     /// you are sure you set everything correctly (i.e. the width/height need to match the aspect
     /// ratio, etc).
-    pub fn builder(alloc: Allocator, io: Io, image: Image, seed: u64) *CameraBuilder {
-        // Allocate space on the heap for the builder.
-        const builderPtr = alloc.create(CameraBuilder) catch unreachable;
-        builderPtr.* = CameraBuilder{
-            .alloc = alloc,
-            .io = io,
+    pub fn builder(image: Image, scene: Scene) CameraBuilder {
+        return CameraBuilder{
             .image = image,
-            .seed = seed,
+            .scene = scene,
         };
-        return builderPtr;
     }
 
-    pub fn deinit(self: *Camera) void {
-        self.alloc.destroy(self.nextRow);
-        self.scene.deinit();
-    }
+    pub fn render(self: *Camera, io: Io) !void {
+        std.log.info("Using seed: 0x{x}", .{ self.scene.seed });
+        std.log.info("Rendering image: {f}", .{ self.image });
 
-    pub fn render(self: *Camera) !void {
         // Create thread pool
         var group = Io.Group.init;
-        defer group.cancel(self.io);
+        defer group.cancel(io);
 
         const numCpus = std.Thread.getCpuCount() catch 1;
         std.log.info("Processing with {} threads.", .{ numCpus });
+        std.log.info("Percent completed: 0%", .{});
 
         for (0..numCpus) |t| {
-            group.async(self.io, renderRow, .{ self, t });
+            group.async(io, renderRow, .{ self, t });
         }
-        try group.await(self.io);
+        try group.await(io);
 
         std.log.info("Done processing. Saving file to: {s}", .{ config.fileName });
 
         // Save the file
-        try self.image.savePpmBinary("images/" ++ config.fileName);
+        try self.image.savePpmBinary(io, "images/" ++ config.fileName);
     }
 
     fn renderRow(self: *Camera, threadNum: usize) void {
@@ -129,22 +122,21 @@ pub const Camera = struct {
         const height = self.image.height;
 
         while (true) {
-            const startRow = self.nextRow.fetchAdd(self.chunkSize, .monotonic);
+            const startRow = self.nextRow.fetchAdd(@intCast(self.chunkSize), .monotonic);
             if (startRow >= height) break;
 
-            const percentComplete: f32 = @as(f32, @floatFromInt(startRow)) / @as(f32, @floatFromInt(height)) * 100.0;
-            std.log.info("Thread {d}: {d}/{d} rows, {d:.2}% complete.", .{ threadNum + 1, startRow, height, percentComplete });
-            const endRow = @min(startRow + self.chunkSize, height);
+            std.log.debug("Thread {d}: {d}/{d} rows, Beginning processing at {d}%.", .{ threadNum + 1, startRow, height, percentComplete(startRow, height) });
+            const endRow: u16 = @min(startRow + @as(u16, self.chunkSize), height);
 
-            const start = startRow * width;
-            const end = endRow * width;
+            const start = @as(u32, startRow) * @as(u32, width);
+            const end = @as(u32, endRow) * @as(u32, width);
             const slice = self.image.pixels[start..end];
 
             for (startRow..endRow) |globalRow| {
                 const localRow = globalRow - startRow;
 
                 // Create thread local RNG with deterministic, but unique seed per row
-                var splitMix64 = SplitMix64.init(self.seed +% @as(u64, @intCast(globalRow)));
+                var splitMix64 = SplitMix64.init(self.scene.seed +% @as(u64, @intCast(globalRow)));
                 var prng = DefaultPrng.init(splitMix64.next());
 
                 for (0..width) |col| {
@@ -152,16 +144,41 @@ pub const Camera = struct {
 
                     // Anti-aliasing sampling
                     for (0..self.samplesPerPixel) |_| {
-                        const ray = self.getRay(col, globalRow, &prng);
+                        const ray = self.getRay(@truncate(col), @truncate(globalRow), &prng);
                         pixelColor += self.rayColor(ray);
                     }
 
                     const avgColor = Color.fromVec(Vec.mulScalar(pixelColor, self.pixelSamplesScale));
-                    slice[col + localRow * width] = avgColor;
+                    const index: u32 = @as(u32, @truncate(col)) + @as(u32, @truncate(localRow)) * @as(u32, width);
+                    slice[index] = avgColor;
+                }
+            }
+
+            if (comptime std.log.logEnabled(.info, .default)) {
+                // floor division to bucket into every 5%
+                const newProgress = percentComplete(endRow, height) / 5 * 5; 
+
+                while (true) {
+                    const lastProgress = self.lastProgressPercent.load(.monotonic);
+                    if (newProgress <= lastProgress) break;
+
+                    if (self.lastProgressPercent.cmpxchgWeak(
+                        lastProgress, 
+                        newProgress, 
+                        .monotonic, 
+                        .monotonic) == null
+                    ) {
+                        std.log.info("Percent completed: {d}%", .{ newProgress });
+                        break;
+                    }
                 }
             }
         }
-        std.log.info("Thread {d}: -----[DONE (idle)]-----", .{ threadNum + 1 });
+        std.log.debug("Thread {d}: -----[DONE (idle)]-----", .{ threadNum + 1 });
+    }
+
+    inline fn percentComplete(row: u16, height: u16) u8 {
+        return @truncate(@as(u32, row) * 100 / @as(u32, height));
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
@@ -171,7 +188,7 @@ pub const Camera = struct {
         var ray = r;
         return color: {
             while (bounces < self.bounceMax) : (bounces += 1) {
-                if (self.scene.world.hit(ray, self.scene.interval)) |rec| {
+                if (self.scene.hit(ray, self.scene.interval)) |rec| {
                     if (rec.mat.scatter(ray, rec)) |s| {
                         // Attenuate the return color when it scatters (starts at white)
                         // and check for another bounce
@@ -204,7 +221,7 @@ pub const Camera = struct {
 
     /// Gets a Camera Ray that originates from the origin point and is directed
     /// towards a randomized sample point around the pixel location (i, j)
-    fn getRay(self: Camera, i: usize, j: usize, prng: *DefaultPrng) Ray {
+    fn getRay(self: Camera, i: u16, j: u16, prng: *DefaultPrng) Ray {
         const randomOffset = self.sampleSquare(prng);
         const pixelSample = self.pixel0 + Vec.mulScalar(self.du, @as(f64, @floatFromInt(i)) + randomOffset[0]) + Vec.mulScalar(self.dv, @as(f64, @floatFromInt(j)) + randomOffset[1]);
 
@@ -255,14 +272,11 @@ const defaultDefocusDiskU = Vec.mulScalar(defaultU, defaultDefocusRadius);
 const defaultDefocusDiskV = Vec.mulScalar(defaultV, defaultDefocusRadius);
 pub const CameraBuilder = struct {
     /// Required
-    alloc: Allocator,
-    io: Io,
     image: Image,
-    seed: u64,
+    scene: Scene,
 
     /// Configurable/buildable parameters
-    scene: ?Scene = null,
-    samplesPerPixel: ?usize = defaultSamplesPerPixel, // Count of random samples for each pixel
+    samplesPerPixel: ?u16 = defaultSamplesPerPixel, // Count of random samples for each pixel
     bounceMax: ?usize = defaultBounceMax, // Maximum number of ray bounces into scene
     center: ?Point3 = defaultCameraCenter, // Camera center
     lookFrom: ?Point3 = defaultLookFrom, // Point camera is looking from
@@ -276,66 +290,60 @@ pub const CameraBuilder = struct {
     pixelSamplesScale: ?f64 = defaultPixelSamplesScale, // Color scale factor for a sum of pixel samples
 
     /// Sets the scene to be rendered
-    pub fn setScene(self: *CameraBuilder, scene: Scene) *CameraBuilder {
-        self.scene = scene;
-        return self;
+    pub fn setScene(self: CameraBuilder, scene: Scene) CameraBuilder {
+        var new = self;
+        new.scene = scene;
+        return new;
     }
 
     /// Sets the focusDist. Must be set before creating the viewport.
-    pub fn setFocusDist(self: *CameraBuilder, focusDist: f64) *CameraBuilder {
-        self.focusDist = focusDist;
-        return self;
+    pub fn setFocusDist(self: CameraBuilder, focusDist: f64) CameraBuilder {
+        var new = self;
+        new.focusDist = focusDist;
+        return new;
     }
 
     /// Sets the defocusAngle.
-    pub fn setDefocusAngle(self: *CameraBuilder, defocusAngle: f64) *CameraBuilder {
-        self.defocusAngle = defocusAngle;
-        return self;
+    pub fn setDefocusAngle(self: CameraBuilder, defocusAngle: f64) CameraBuilder {
+        var new = self;
+        new.defocusAngle = defocusAngle;
+        return new;
     }
 
     /// Sets the viewport related items like the camera's center, lookFrom,
     /// lookAt, vFov, and viewport parameters.
-    pub fn setViewport(self: *CameraBuilder, lookFrom: Point3, lookAt: Point3, vFov: f64) *CameraBuilder {
-        self.center = lookFrom;
-        self.lookFrom = lookFrom;
-        self.lookAt = lookAt;
-        self.viewport = Viewport.init(self.image, vFov, self.focusDist.?);
-        return self;
+    pub fn setViewport(self: CameraBuilder, lookFrom: Point3, lookAt: Point3, vFov: f64) CameraBuilder {
+        var new = self;
+        new.center = lookFrom;
+        new.lookFrom = lookFrom;
+        new.lookAt = lookAt;
+        new.viewport = Viewport.init(new.image, vFov, new.focusDist.?);
+        return new;
     }
 
     /// Set the samplesPerPixel and the related pixelSamplesScale parameter.
-    pub fn setSamplesPerPixel(self: *CameraBuilder, samplesPerPixel: usize) *CameraBuilder {
-        self.samplesPerPixel = samplesPerPixel;
-        self.pixelSamplesScale = 1.0 / @as(f64, @floatFromInt(samplesPerPixel));
-        return self;
+    pub fn setSamplesPerPixel(self: CameraBuilder, samplesPerPixel: u16) CameraBuilder {
+        var new = self;
+        new.samplesPerPixel = samplesPerPixel;
+        new.pixelSamplesScale = 1.0 / @as(f64, @floatFromInt(samplesPerPixel));
+        return new;
     }
 
     /// Set the maximum number of times a given ray can bounce
-    pub fn setBounceMax(self: *CameraBuilder, bounceMax: usize) *CameraBuilder {
-        self.bounceMax = bounceMax;
-        return self;
+    pub fn setBounceMax(self: CameraBuilder, bounceMax: usize) CameraBuilder {
+        var new = self;
+        new.bounceMax = bounceMax;
+        return new;
     }
 
     /// Set which direction is up.
-    pub fn setVUp(self: *CameraBuilder, vUp: Vec3) *CameraBuilder {
-        self.vUp = vUp;
-        return self;
+    pub fn setVUp(self: CameraBuilder, vUp: Vec3) CameraBuilder {
+        var new = self;
+        new.vUp = vUp;
+        return new;
     }
 
-    pub fn build(self: *CameraBuilder) Camera {
-        // Make sure we free the builder when done
-        defer self.alloc.destroy(self);
-
-        const scene = blk: {
-            if (self.scene) |s| {
-                break :blk s;
-            } else {
-                var s = Scene.init(self.alloc, self.io, self.seed);
-                s.generateWorld();
-                break :blk s;
-            }
-        };
-
+    pub fn build(self: CameraBuilder) Camera {
         const w = Vec.unit(self.lookFrom.? - self.lookAt.?);
         const u = Vec.unit(Vec.cross(self.vUp.?, w));
         const v = Vec.cross(w, u);
@@ -349,16 +357,9 @@ pub const CameraBuilder = struct {
 
         const defocusRadius = self.focusDist.? * @tan(degToRad(self.defocusAngle.? / 2.0));
 
-        // Use an atomic "next row" counter for the multi-threaded rendering
-        const nextRow: *Value(usize) = self.alloc.create(Value(usize)) catch unreachable;
-        nextRow.* = Value(usize).init(0);
-
         return .{
-            .alloc = self.alloc,
-            .io = self.io,
             .image = self.image,
-            .seed = self.seed,
-            .scene = scene,
+            .scene = self.scene,
             .viewport = self.viewport.?,
             .samplesPerPixel = self.samplesPerPixel.?,
             .pixelSamplesScale = self.pixelSamplesScale.?,
@@ -377,7 +378,8 @@ pub const CameraBuilder = struct {
             .du = du,
             .dv = dv,
             .pixel0 = viewportUpperLeft + Vec.mulScalar((du + dv), 0.5),
-            .nextRow = nextRow,
+            .nextRow = Value(u16).init(0),
+            .lastProgressPercent = Value(u8).init(0),
             .chunkSize = config.chunkSize,
         };
     }
@@ -385,16 +387,15 @@ pub const CameraBuilder = struct {
 
 test "Viewport" {
     const alloc = std.testing.allocator;
-    const io = std.testing.io;
 
     const vFov: f64 = 90;
     const height: f64 = 2.0 * @tan(degToRad(vFov) / 2.0) * 2.0;
     const vp = Viewport{ .width = 16.0, .height = height, .vFov = vFov };
-    const aspectRatio = @as(f64, @floatFromInt(16)) / @as(f64, @floatFromInt(9));
     const imgRatio: f64 = @as(f64, @floatFromInt(400)) / @as(f64, @floatFromInt(225));
 
-    var img = Image.init(alloc, io, 400, aspectRatio);
-    defer img.deinit();
+    const pixels = try alloc.alloc(Color, 400 * 225);
+    defer alloc.free(pixels);
+    const img = Image{ .width = 400, .height = 225, .pixels = pixels };
 
     const vp2 = Viewport.init(img, vFov, 2.0);
     const expected = "16.00x4.00 @ 90";
@@ -411,19 +412,20 @@ test "Viewport" {
 
 test "CameraBuilder" {
     const alloc = std.testing.allocator;
-    const io = std.testing.io;
 
-    var image = Image.init(alloc, io, 400, (16.0 / 9.0));
-    defer image.deinit();
+    const pixels = try alloc.alloc(Color, 400 * 225);
+    defer alloc.free(pixels);
+    const image = Image{ .width = 400, .height = 225, .pixels = pixels };
 
-    var builder = Camera.builder(alloc, io, image, 0xdeadbeef);
+    const seed = 0xdeadbeef;
+    const scene = Scene{ .seed = seed, .world = undefined };
+    var builder = Camera.builder(image, scene);
 
     try std.testing.expectEqual(defaultCameraCenter, builder.center);
     try std.testing.expectEqual(defaultLookFrom, builder.lookFrom);
     try std.testing.expectEqual(defaultLookAt, builder.lookAt);
     try std.testing.expectEqual(defaultFocusDist, builder.focusDist);
     try std.testing.expectEqualDeep(null, builder.viewport);
-    try std.testing.expectEqualDeep(null, builder.scene);
     try std.testing.expectEqual(defaultSamplesPerPixel, builder.samplesPerPixel);
     try std.testing.expectEqual(defaultPixelSamplesScale, builder.pixelSamplesScale);
     try std.testing.expectEqual(defaultBounceMax, builder.bounceMax);
@@ -431,9 +433,11 @@ test "CameraBuilder" {
 
     const vFov = 90;
 
-    const scene = Scene.init(alloc, io, 0xdeadbeef);
-    builder = builder.setScene(scene);
-    try std.testing.expectEqualDeep(scene, builder.scene);
+    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter14));
+    defer alloc.free(world);
+    const otherScene = Scene{ .seed = seed, .world = world};
+    builder = builder.setScene(otherScene);
+    try std.testing.expectEqualDeep(otherScene, builder.scene);
 
     builder = builder.setViewport(defaultLookFrom, defaultLookAt, vFov);
     try std.testing.expectEqual(defaultCameraCenter, builder.center);
@@ -458,8 +462,7 @@ test "CameraBuilder" {
     try std.testing.expectEqual(10, builder.samplesPerPixel);
     try std.testing.expectEqual(1 / @as(f64, @floatFromInt(10)), builder.pixelSamplesScale);
 
-    var camera = builder.build();
-    defer camera.deinit();
+    const camera = builder.build();
 
     try std.testing.expectEqual(defaultU, camera.u);
     try std.testing.expectEqual(defaultV, camera.v);
@@ -468,7 +471,7 @@ test "CameraBuilder" {
     try std.testing.expectEqual(1 / @as(f64, @floatFromInt(10)), camera.pixelSamplesScale);
     try std.testing.expectEqual(100, camera.bounceMax);
     try std.testing.expectEqual(defaultVUp, camera.vUp);
-    try std.testing.expectEqualDeep(scene, camera.scene);
+    try std.testing.expectEqualDeep(otherScene, camera.scene);
     try std.testing.expectEqualDeep(Viewport.init(camera.image, vFov, defaultFocusDist), camera.viewport);
     try std.testing.expectEqual(defaultCameraCenter, camera.center);
     try std.testing.expectEqual(defaultLookFrom, camera.lookFrom);
@@ -480,7 +483,6 @@ test "CameraBuilder" {
 }
 
 test "Camera" {
-    const io = std.testing.io;
     const alloc = std.testing.allocator;
 
     const cameraCenter = Vec3{ 0, 0, 0 };
@@ -491,20 +493,15 @@ test "Camera" {
     const height: f64 = 2.0 * @tan(degToRad(vFov) / 2.0);
 
     const seed = 0xdeadbeef;
-    var scene = Scene.init(alloc, io, seed);
-    defer scene.deinit();
+    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter14));
+    defer alloc.free(world);
+    const scene = Scene{ .seed = seed, .world = world };
 
-    var image = Image.init(alloc, io, 800, 2.0);
-    defer image.deinit();
-
-    const nextRow = alloc.create(Value(usize)) catch unreachable;
-    nextRow.* = Value(usize).init(0);
-    defer alloc.destroy(nextRow);
+    const pixels = try alloc.alloc(Color, 800 * 400);
+    defer alloc.free(pixels);
+    const image = Image{ .width = 800, .height = 400, .pixels = pixels };
 
     var camera = Camera{
-        .alloc = alloc,
-        .io = io,
-        .seed = seed,
         .image = image,
         .viewport = .{
             .width = 4.0,
@@ -520,17 +517,18 @@ test "Camera" {
         .focusDist = defaultFocusDist,
         .samplesPerPixel = defaultSamplesPerPixel,
         .pixelSamplesScale = defaultPixelSamplesScale,
-        .nextRow = nextRow,
+        .nextRow = Value(u16).init(0),
+        .lastProgressPercent = Value(u8).init(0),
         .chunkSize = config.chunkSize,
     };
 
-    var image2 = Image.init(alloc, io, 400, (16.0 / 9.0));
-    defer image2.deinit();
+    const pixels2 = try alloc.alloc(Color, 400 * 225);
+    defer alloc.free(pixels2);
+    const image2 = Image{ .width = 400, .height = 225, .pixels = pixels2 };
 
-    var init = Camera.builder(alloc, io, image2, seed)
+    var init = Camera.builder(image2, scene)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
-    defer init.deinit();
 
     try std.testing.expectEqual(defaultFocusDist, camera.focusDist);
     try std.testing.expectEqual(800, camera.image.width);
@@ -578,20 +576,25 @@ test "Camera.sampleSquare()" {
     const io = std.testing.io;
     const alloc = std.testing.allocator;
 
-    const prng = initTestPrng(alloc, io);
-    defer alloc.destroy(prng);
+    var prng = DefaultPrng.init(blk: {
+        var buffer: u64 = undefined;
+        io.random(std.mem.asBytes(&buffer));
+        break :blk buffer;
+    });
 
-    var image = Image.init(alloc, io, 400, 1.0);
-    defer image.deinit();
+    const pixels = try alloc.alloc(Color, 400 * 400);
+    defer alloc.free(pixels);
+    const image = Image{ .width = 400, .height = 400, .pixels = pixels };
 
-    var camera = Camera.builder(alloc, io, image, 0xdeadbeef)
+    const seed = 0xdeadbeef;
+    const scene = Scene{ .seed = seed, .world = undefined };
+    var camera = Camera.builder(image, scene)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
-    defer camera.deinit();
 
     const tests = 10;
     for (0..tests) |_| {
-        const sample = camera.sampleSquare(prng);
+        const sample = camera.sampleSquare(&prng);
         try std.testing.expect(-0.5 <= sample[0] and sample[0] <= 0.5);
         try std.testing.expect(-0.5 <= sample[1] and sample[1] <= 0.5);
         try std.testing.expectEqual(0, sample[2]);
@@ -602,33 +605,27 @@ test "Camera.defocusDiskSample()" {
     const io = std.testing.io;
     const alloc = std.testing.allocator;
 
-    const prng = initTestPrng(alloc, io);
-    defer alloc.destroy(prng);
+    var prng = DefaultPrng.init(blk: {
+        var buffer: u64 = undefined;
+        io.random(std.mem.asBytes(&buffer));
+        break :blk buffer;
+    });
 
-    var image = Image.init(alloc, io, 400, 1.0);
-    defer image.deinit();
+    const pixels = try alloc.alloc(Color, 400 * 400);
+    defer alloc.free(pixels);
+    const image = Image{ .width = 400, .height = 400, .pixels = pixels };
 
-    var camera = Camera.builder(alloc, io, image, 0xdeadbeef)
+    const seed = 0xdeadbeef;
+    const scene = Scene{ .seed = seed, .world = undefined };
+    var camera = Camera.builder(image, scene)
         .setViewport(Point3{ 0, 0, 0 }, Point3{ 0, 0, -1 }, 90)
         .build();
-    defer camera.deinit();
 
     const tests = 10;
     for (0..tests) |_| {
-        const sample = camera.defocusDiskSample(prng);
+        const sample = camera.defocusDiskSample(&prng);
         try std.testing.expect(-1 <= sample[0] and sample[0] <= 1);
         try std.testing.expect(-1 <= sample[1] and sample[1] <= 1);
         try std.testing.expectEqual(0, sample[2]);
     }
-}
-
-// Test helper to create a Prng. Deallocate after this call
-fn initTestPrng(alloc: Allocator, io: Io) *DefaultPrng {
-    const prng: *DefaultPrng = alloc.create(DefaultPrng) catch unreachable;
-    prng.* = DefaultPrng.init(blk: {
-        var seed: u64 = undefined;
-        io.random(std.mem.asBytes(&seed));
-        break :blk seed;
-    });
-    return prng;
 }
