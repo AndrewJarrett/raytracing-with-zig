@@ -1,7 +1,7 @@
 const std = @import("std");
 const util = @import("util.zig");
 const Ray = @import("ray.zig").Ray;
-const HitRecord = @import("hittable.zig").HitRecord;
+const Hit = @import("hittable.zig").Hit;
 const Color3 = @import("color.zig").Color3;
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
@@ -22,7 +22,7 @@ pub const Lambertian = struct {
         };
     }
 
-    pub fn scatter(self: Lambertian, ray: Ray, rec: HitRecord) ?Scatter {
+    pub fn scatter(self: Lambertian, ray: Ray, rec: Hit) ?Scatter {
         var dir = rec.normal + Vec.randomUnitVec(ray.prng);
         if (Vec.nearZero(dir)) {
             dir = rec.normal;
@@ -46,7 +46,7 @@ pub const Metal = struct {
         };
     }
 
-    pub fn scatter(self: Metal, ray: Ray, rec: HitRecord) ?Scatter {
+    pub fn scatter(self: Metal, ray: Ray, rec: Hit) ?Scatter {
         var s: ?Scatter = null;
 
         const reflected = Vec.unit(Vec.reflect(ray.dir, rec.normal)) +
@@ -71,7 +71,7 @@ pub const Dielectric = struct {
         };
     }
 
-    pub fn scatter(self: Dielectric, ray: Ray, rec: HitRecord) ?Scatter {
+    pub fn scatter(self: Dielectric, ray: Ray, rec: Hit) ?Scatter {
         const refract = if (rec.front)
             1.0 / self.refractionIndex
         else
@@ -133,7 +133,7 @@ pub const Material = union(MaterialType) {
         };
     }
 
-    pub fn scatter(self: Material, ray: Ray, rec: HitRecord) ?Scatter {
+    pub fn scatter(self: Material, ray: Ray, rec: Hit) ?Scatter {
         return switch (self) {
             .lambertian => |l| l.scatter(ray, rec),
             .metal => |m| m.scatter(ray, rec),
@@ -160,16 +160,14 @@ test "Scatter" {
 
 test "Lambertian" {
     const albedo = Color3{ 1, 1, 1 };
-    const prngPtr = try testPrng(0xabadcafe);
-    const otherPrng = try testPrng(0xabadcafe);
-    defer std.testing.allocator.destroy(prngPtr);
-    defer std.testing.allocator.destroy(otherPrng);
+    var prng = DefaultPrng.init(0xabadcafe);
+    var otherPrng = DefaultPrng.init(0xabadcafe);
 
     const lam = Lambertian.init(albedo);
     const normal = Vec3{ 0, 0, 1 };
     const s = lam.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, prngPtr),
-        HitRecord{
+        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng),
+        Hit{
             .point = Vec3{ 0, 0, -1 },
             .normal = normal,
             .mat = Material.init(.lambertian, .{ .albedo = albedo }),
@@ -177,8 +175,8 @@ test "Lambertian" {
             .front = true,
         },
     );
-    const randVec = Vec.randomUnitVec(otherPrng);
-    const expectedRay = Ray.init(Vec3{ 0, 0, -1 }, normal + randVec, prngPtr);
+    const randVec = Vec.randomUnitVec(&otherPrng);
+    const expectedRay = Ray.init(Vec3{ 0, 0, -1 }, normal + randVec, &prng);
 
     try std.testing.expectEqual(albedo, lam.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -187,15 +185,14 @@ test "Lambertian" {
 
 test "Metal" {
     const albedo = Color3{ 1, 1, 1 };
-    const prngPtr = try testPrng(0xabadcafe);
-    defer std.testing.allocator.destroy(prngPtr);
+    var prng = DefaultPrng.init(0xabadcafe);
 
     const metal = Metal.init(albedo, 0);
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = metal.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, point, prngPtr),
-        HitRecord{
+        Ray.init(Vec3{ 0, 0, 0 }, point, &prng),
+        Hit{
             .point = point,
             .normal = normal,
             .mat = Material.init(.metal, .{ .albedo = albedo, .fuzz = 0 }),
@@ -203,7 +200,7 @@ test "Metal" {
             .front = true,
         },
     );
-    const expectedRay = Ray.init(point, Vec.reflect(point, normal), prngPtr);
+    const expectedRay = Ray.init(point, Vec.reflect(point, normal), &prng);
 
     try std.testing.expectEqual(albedo, metal.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -212,16 +209,15 @@ test "Metal" {
 
 test "Dielectric" {
     const albedo = Color3{ 1, 1, 1 };
-    const prngPtr = try testPrng(0xabadcafe);
-    defer std.testing.allocator.destroy(prngPtr);
+    var prng = DefaultPrng.init(0xabadcafe);
     const refract = 1.50;
 
     const dielectric = Dielectric.init(refract);
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = dielectric.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, point, prngPtr),
-        HitRecord{
+        Ray.init(Vec3{ 0, 0, 0 }, point, &prng),
+        Hit{
             .point = point,
             .normal = normal,
             .mat = Material.init(.dielectric, .{ .refractionIndex = refract }),
@@ -229,7 +225,7 @@ test "Dielectric" {
             .front = true,
         },
     );
-    const expectedRay = Ray.init(point, Vec.refract(point, normal, 1.0 / refract), prngPtr);
+    const expectedRay = Ray.init(point, Vec.refract(point, normal, 1.0 / refract), &prng);
 
     try std.testing.expectEqual(refract, dielectric.refractionIndex);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -246,15 +242,14 @@ test "MaterialType" {
 
 test "Material" {
     const albedo = Color3{ 1, 1, 1 };
-    const prngPtr = try testPrng(0xabadcafe);
-    defer std.testing.allocator.destroy(prngPtr);
+    var prng = DefaultPrng.init(0xabadcafe);
 
     const mat = Material.init(.metal, .{ .albedo = albedo, .fuzz = 0 });
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = mat.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, prngPtr),
-        HitRecord{
+        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng),
+        Hit{
             .point = Vec3{ 0, 0, -1 },
             .normal = Vec3{ 0, 0, 1 },
             .mat = mat,
@@ -263,17 +258,9 @@ test "Material" {
         },
     );
 
-    const expectedRay = Ray.init(point, Vec.reflect(point, normal), prngPtr);
+    const expectedRay = Ray.init(point, Vec.reflect(point, normal), &prng);
 
     try std.testing.expectEqual(albedo, mat.metal.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);
     try std.testing.expectEqualDeep(expectedRay, s.?.scattered);
-}
-
-fn testPrng(seed: u64) !*DefaultPrng {
-    const prngPtr = try std.testing.allocator.create(DefaultPrng);
-    const prng = DefaultPrng.init(seed);
-    prngPtr.* = prng;
-
-    return prngPtr;
 }
