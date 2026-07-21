@@ -3,7 +3,7 @@ const Ray = @import("ray.zig").Ray;
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
 const Point3 = @import("vec.zig").Point3;
-const HitRecord = @import("hittable.zig").HitRecord;
+const Hit = @import("hittable.zig").Hit;
 const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
 const Color3 = @import("color.zig").Color3;
@@ -23,7 +23,7 @@ pub const Sphere = struct {
         };
     }
 
-    pub fn hit(self: Sphere, ray: Ray, t: Interval) ?HitRecord {
+    pub fn hit(self: Sphere, ray: Ray, t: Interval) ?Hit {
         const oc = self.center - ray.orig;
         const a = Vec.lenSquared(ray.dir);
         const h = Vec.dot(ray.dir, oc);
@@ -55,11 +55,6 @@ pub const Sphere = struct {
 };
 
 test "init()" {
-    const prngPtr = try std.testing.allocator.create(DefaultPrng);
-    defer std.testing.allocator.destroy(prngPtr);
-    const prng = DefaultPrng.init(0xabadcafe);
-    prngPtr.* = prng;
-
     const center = Point3{ 0, 0, 0 };
     const radius = 1.0;
     const mat = Material.init(
@@ -74,10 +69,7 @@ test "init()" {
 }
 
 test "hit() success" {
-    const prngPtr = try std.testing.allocator.create(DefaultPrng);
-    defer std.testing.allocator.destroy(prngPtr);
-    const prng = DefaultPrng.init(0xabadcafe);
-    prngPtr.* = prng;
+    var prng = DefaultPrng.init(0xabadcafe);
 
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
@@ -87,7 +79,7 @@ test "hit() success" {
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, prngPtr);
+    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
 
     try std.testing.expect(hitRecord != null);
@@ -98,10 +90,7 @@ test "hit() success" {
 }
 
 test "hit() hit out of range" {
-    const prngPtr = try std.testing.allocator.create(DefaultPrng);
-    defer std.testing.allocator.destroy(prngPtr);
-    const prng = DefaultPrng.init(0xabadcafe);
-    prngPtr.* = prng;
+    var prng = DefaultPrng.init(0xabadcafe);
 
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
@@ -111,16 +100,13 @@ test "hit() hit out of range" {
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, prngPtr);
+    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 0.0));
     try std.testing.expect(hitRecord == null);
 }
 
 test "hit() no hit" {
-    const prngPtr = try std.testing.allocator.create(DefaultPrng);
-    defer std.testing.allocator.destroy(prngPtr);
-    const prng = DefaultPrng.init(0xabadcafe);
-    prngPtr.* = prng;
+    var prng = DefaultPrng.init(0xabadcafe);
 
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
@@ -130,7 +116,7 @@ test "hit() no hit" {
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, 1 }, prngPtr);
+    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, 1 }, &prng);
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
     try std.testing.expect(hitRecord == null);
 }
