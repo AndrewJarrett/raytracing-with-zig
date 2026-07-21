@@ -5,13 +5,15 @@ const Point3 = @import("vec.zig").Point3;
 const Vec3 = @import("vec.zig").Vec3;
 
 const Writer = std.Io.Writer;
+const DefaultPrng = std.Random.DefaultPrng;
 
 pub const Ray = struct {
     orig: Point3,
     dir: Vec3,
+    prng: *DefaultPrng,
 
-    pub fn init(orig: Point3, dir: Vec3) Ray {
-        return .{ .orig = orig, .dir = dir };
+    pub fn init(orig: Point3, dir: Vec3, prng: *DefaultPrng) Ray {
+        return .{ .orig = orig, .dir = dir, .prng = prng, };
     }
 
     pub fn at(self: Ray, t: f64) Vec3 {
@@ -24,7 +26,9 @@ pub const Ray = struct {
 };
 
 test "init()" {
-    const ray = Ray.init(Point3{ 0, 0, 0 }, Vec3{ 1, 2, 3 });
+    var prng = DefaultPrng.init(0xabadcafe);
+
+    const ray = Ray.init(Point3{ 0, 0, 0 }, Vec3{ 1, 2, 3 }, &prng);
 
     try std.testing.expectEqual(0, ray.orig[0]);
     try std.testing.expectEqual(0, ray.orig[1]);
@@ -36,9 +40,11 @@ test "init()" {
 }
 
 test "at()" {
+    var prng = DefaultPrng.init(0xabadcafe);
+
     const orig = Point3{ 0, 0, 0 };
     const dir = Vec3{ 1, 2, 3 };
-    const ray = Ray.init(orig, dir);
+    const ray = Ray.init(orig, dir, &prng);
     const t = 1.0;
 
     const expected = Vec3{ 1, 2, 3 };
@@ -47,9 +53,11 @@ test "at()" {
 }
 
 test "format()" {
+    var prng = DefaultPrng.init(0xabadcafe);
+
     const orig = Point3{ 0.1, 0.9, 0.5 };
     const dir = Vec3{ 1.0, 2.0, 3.0 };
-    const ray = Ray.init(orig, dir);
+    const ray = Ray.init(orig, dir, &prng);
 
     const expected = "{ 0.1, 0.9, 0.5 } -> { 1, 2, 3 }";
     var buffer: [50]u8 = undefined;
