@@ -52,14 +52,15 @@ fn append(self: *Self, object: Object) void {
 }
 
 pub fn objects(self: Self) []Object {
+    assert(self.len <= self.world.len);
     return self.world[0..self.len];
 }
 
 pub fn generateScene(self: *Self, comptime sceneType: @EnumLiteral()) void {
     switch (sceneType) {
-        inline .chapter13 => self.generateChapter13(),
-        inline .chapter14 => self.generateChapter14(),
-        else => return,
+        .chapter13 => self.generateChapter13(),
+        .chapter14 => self.generateChapter14(),
+        else => @compileError("Unsupported sceneType: " ++ @tagName(sceneType)),
     }
 }
 
