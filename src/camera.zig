@@ -156,7 +156,7 @@ pub const Camera = struct {
 
             if (comptime std.log.logEnabled(.info, .default)) {
                 // floor division to bucket into every 5%
-                const newProgress = percentComplete(endRow, height) / 5 * 5; 
+                const newProgress: u8 = @truncate(percentComplete(endRow, height) / 5 * 5);
 
                 while (true) {
                     const lastProgress = self.lastProgressPercent.load(.monotonic);
