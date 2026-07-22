@@ -19,11 +19,14 @@ pub inline fn getHeightFromWidthAndRatio(comptime width: u16, comptime ratio: f6
 /// ever needed after creation of the struct
 pub fn aspectRatio(self: Self) f64 {
     assert(self.height >= 1);
+
     return @as(f64, @floatFromInt(self.width)) / @as(f64, @floatFromInt(self.height));
 }
 
 /// Saves the pixels which contains the image information into the PPM specific format.
 pub fn savePpm(self: Self, io: Io, filename: []const u8) !void {
+    assert(filename.len > 0);
+
     var file = try std.Io.Dir.cwd().createFile(io, filename, .{});
     defer file.close(io);
 
@@ -42,6 +45,8 @@ pub fn savePpm(self: Self, io: Io, filename: []const u8) !void {
 
 // Saves the PPM in binary format
 pub fn savePpmBinary(self: Self, io: Io, filename: []const u8) !void {
+    assert(filename.len > 0);
+
     var file = try std.Io.Dir.cwd().createFile(io, filename, .{});
     defer file.close(io);
 
