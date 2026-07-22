@@ -102,11 +102,11 @@ pub const Camera = struct {
         var group = Io.Group.init;
         defer group.cancel(io);
 
-        const numCpus = std.Thread.getCpuCount() catch 1;
-        std.log.info("Processing with {} threads.", .{ numCpus });
+        const cpus = std.Thread.getCpuCount() catch 1;
+        std.log.info("Processing with {} threads.", .{ cpus });
         std.log.info("Percent completed: 0%", .{});
 
-        for (0..numCpus) |t| {
+        for (0..cpus) |t| {
             group.async(io, renderRow, .{ self, t });
         }
         try group.await(io);
@@ -118,25 +118,26 @@ pub const Camera = struct {
     }
 
     fn renderRow(self: *Camera, threadNum: usize) void {
-        const width = self.image.width;
-        const height = self.image.height;
+        const width: usize = self.image.width;
+        const height: usize = self.image.height;
+        const chunkSize: usize = self.chunkSize;
 
         while (true) {
-            const startRow = self.nextRow.fetchAdd(@intCast(self.chunkSize), .monotonic);
+            const startRow: usize = self.nextRow.fetchAdd(@intCast(chunkSize), .monotonic);
             if (startRow >= height) break;
 
             std.log.debug("Thread {d}: {d}/{d} rows, Beginning processing at {d}%.", .{ threadNum + 1, startRow, height, percentComplete(startRow, height) });
-            const endRow: u16 = @min(startRow + @as(u16, self.chunkSize), height);
+            const endRow: usize = @min(startRow + chunkSize, height);
 
-            const start = @as(u32, startRow) * @as(u32, width);
-            const end = @as(u32, endRow) * @as(u32, width);
+            const start: usize = startRow * width;
+            const end: usize = endRow * width;
             const slice = self.image.pixels[start..end];
 
             for (startRow..endRow) |globalRow| {
                 const localRow = globalRow - startRow;
 
                 // Create thread local RNG with deterministic, but unique seed per row
-                var splitMix64 = SplitMix64.init(self.scene.seed +% @as(u64, @intCast(globalRow)));
+                var splitMix64 = SplitMix64.init(self.scene.seed +% @as(u64, globalRow));
                 var prng = DefaultPrng.init(splitMix64.next());
 
                 for (0..width) |col| {
@@ -144,13 +145,12 @@ pub const Camera = struct {
 
                     // Anti-aliasing sampling
                     for (0..self.samplesPerPixel) |_| {
-                        const ray = self.getRay(@truncate(col), @truncate(globalRow), &prng);
+                        const ray = self.getRay(col, globalRow, &prng);
                         pixelColor += self.rayColor(ray);
                     }
 
                     const avgColor = Color.fromVec(Vec.mulScalar(pixelColor, self.pixelSamplesScale));
-                    const index: u32 = @as(u32, @truncate(col)) + @as(u32, @truncate(localRow)) * @as(u32, width);
-                    slice[index] = avgColor;
+                    slice[col + localRow * width] = avgColor;
                 }
             }
 
@@ -177,8 +177,8 @@ pub const Camera = struct {
         std.log.debug("Thread {d}: -----[DONE (idle)]-----", .{ threadNum + 1 });
     }
 
-    inline fn percentComplete(row: u16, height: u16) u8 {
-        return @truncate(@as(u32, row) * 100 / @as(u32, height));
+    inline fn percentComplete(row: usize, height: usize) usize {
+        return row * 100 / height;
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
@@ -221,7 +221,7 @@ pub const Camera = struct {
 
     /// Gets a Camera Ray that originates from the origin point and is directed
     /// towards a randomized sample point around the pixel location (i, j)
-    fn getRay(self: Camera, i: u16, j: u16, prng: *DefaultPrng) Ray {
+    fn getRay(self: Camera, i: usize, j: usize, prng: *DefaultPrng) Ray {
         const randomOffset = self.sampleSquare(prng);
         const pixelSample = self.pixel0 + Vec.mulScalar(self.du, @as(f64, @floatFromInt(i)) + randomOffset[0]) + Vec.mulScalar(self.dv, @as(f64, @floatFromInt(j)) + randomOffset[1]);
 
