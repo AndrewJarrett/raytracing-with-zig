@@ -9,7 +9,7 @@ const Vec3 = @import("vec.zig").Vec3;
 pub const Ray = struct {
     orig: Point3,
     dir: Vec3,
-    prng: *DefaultPrng,
+    time: f64 = 0,
 
     pub inline fn at(self: Ray, t: f64) Vec3 {
         return self.orig + (self.dir * Vec.splat(t));
@@ -30,12 +30,14 @@ test "Ray" {
     try std.testing.expectEqual(1, ray.dir[0]);
     try std.testing.expectEqual(2, ray.dir[1]);
     try std.testing.expectEqual(3, ray.dir[2]);
+
+    try std.testing.expectEqual(0, ray.time);
 }
 
 test "at()" {
     const orig = Point3{ 0, 0, 0 };
     const dir = Vec3{ 1, 2, 3 };
-    const ray = Ray{ .orig = orig, .dir = dir };
+    const ray = Ray{ .orig = orig, .dir = dir, .time = 0.5 };
     const t = 1.0;
 
     const expected = Vec3{ 1, 2, 3 };
