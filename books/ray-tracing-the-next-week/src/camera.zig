@@ -230,9 +230,12 @@ pub const Camera = struct {
         else
             self.defocusDiskSample(prng);
 
+        const time = util.randomDouble(prng);
+
         return Ray{
             .orig = rayOrigin,
             .dir = (pixelSample - rayOrigin),
+            .time = time,
         };
     }
 
