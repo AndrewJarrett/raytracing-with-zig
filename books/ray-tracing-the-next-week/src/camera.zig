@@ -15,11 +15,11 @@ const Color3 = @import("color.zig").Color3;
 const Image = @import("Image.zig");
 const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
+const Object = @import("hittable.zig").Object;
 const Point3 = @import("vec.zig").Point3;
 const Ray = @import("ray.zig").Ray;
 const Scene = @import("Scene.zig");
 const SceneType = @import("Scene.zig").SceneType;
-const Object = @import("hittable.zig").Object;
 const util = @import("util.zig");
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
@@ -146,7 +146,7 @@ pub const Camera = struct {
                     // Anti-aliasing sampling
                     for (0..self.samplesPerPixel) |_| {
                         const ray = self.getRay(col, globalRow, &prng);
-                        pixelColor += self.rayColor(ray);
+                        pixelColor += self.rayColor(ray, &prng);
                     }
 
                     const avgColor = Color.fromVec(Vec.mulScalar(pixelColor, self.pixelSamplesScale));
@@ -182,14 +182,14 @@ pub const Camera = struct {
     }
 
     /// Non-recursive method for attenuating and bouncing the ray
-    fn rayColor(self: Camera, r: Ray) Color3 {
+    fn rayColor(self: Camera, r: Ray, prng: *DefaultPrng) Color3 {
         var bounces: usize = 0;
         var returnColor = white;
         var ray = r;
         return color: {
             while (bounces < self.bounceMax) : (bounces += 1) {
                 if (self.scene.hit(ray, self.scene.interval)) |rec| {
-                    if (rec.mat.scatter(ray, rec)) |s| {
+                    if (rec.mat.scatter(ray, rec, prng)) |s| {
                         // Attenuate the return color when it scatters (starts at white)
                         // and check for another bounce
                         ray = s.scattered;
@@ -230,11 +230,10 @@ pub const Camera = struct {
         else
             self.defocusDiskSample(prng);
 
-        return Ray.init(
-            rayOrigin,
-            pixelSample - rayOrigin,
-            prng,
-        );
+        return Ray{
+            .orig = rayOrigin,
+            .dir = (pixelSample - rayOrigin),
+        };
     }
 
     /// Return a vector to a random point in the [-.5,-.5] - [+.5,+.5] unit square

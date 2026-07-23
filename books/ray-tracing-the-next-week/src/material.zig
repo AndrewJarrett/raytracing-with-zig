@@ -1,12 +1,12 @@
 const std = @import("std");
-const util = @import("util.zig");
-const Ray = @import("ray.zig").Ray;
-const Hit = @import("hittable.zig").Hit;
+const DefaultPrng = std.Random.DefaultPrng;
+
 const Color3 = @import("color.zig").Color3;
+const Hit = @import("hittable.zig").Hit;
+const Ray = @import("ray.zig").Ray;
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
-
-const DefaultPrng = std.Random.DefaultPrng;
+const util = @import("util.zig");
 
 pub const Scatter = struct {
     scattered: Ray,
@@ -22,14 +22,14 @@ pub const Lambertian = struct {
         };
     }
 
-    pub fn scatter(self: Lambertian, ray: Ray, rec: Hit) ?Scatter {
-        var dir = rec.normal + Vec.randomUnitVec(ray.prng);
+    pub fn scatter(self: Lambertian, rec: Hit, prng: *DefaultPrng) ?Scatter {
+        var dir = rec.normal + Vec.randomUnitVec(prng);
         if (Vec.nearZero(dir)) {
             dir = rec.normal;
         }
 
         return .{
-            .scattered = Ray.init(rec.point, dir, ray.prng),
+            .scattered = Ray{ .orig = rec.point, .dir = dir },
             .attenuation = self.albedo,
         };
     }
@@ -46,15 +46,15 @@ pub const Metal = struct {
         };
     }
 
-    pub fn scatter(self: Metal, ray: Ray, rec: Hit) ?Scatter {
+    pub fn scatter(self: Metal, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         var s: ?Scatter = null;
 
         const reflected = Vec.unit(Vec.reflect(ray.dir, rec.normal)) +
-            Vec.mulScalar(Vec.randomUnitVec(ray.prng), self.fuzz);
+            Vec.mulScalar(Vec.randomUnitVec(prng), self.fuzz);
 
         if (Vec.dot(reflected, rec.normal) > 0) {
             s = .{
-                .scattered = Ray.init(rec.point, reflected, ray.prng),
+                .scattered = Ray{ .orig = rec.point, .dir = reflected },
                 .attenuation = self.albedo,
             };
         }
@@ -71,7 +71,7 @@ pub const Dielectric = struct {
         };
     }
 
-    pub fn scatter(self: Dielectric, ray: Ray, rec: Hit) ?Scatter {
+    pub fn scatter(self: Dielectric, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         const refract = if (rec.front)
             1.0 / self.refractionIndex
         else
@@ -83,13 +83,13 @@ pub const Dielectric = struct {
 
         const cannotRefract = refract * sinTheta > 1.0;
         const approxReflect = Dielectric.reflectance(cosTheta, refract);
-        const direction = if (cannotRefract or approxReflect > util.randomDouble(ray.prng))
+        const direction = if (cannotRefract or approxReflect > util.randomDouble(prng))
             Vec.reflect(unitDir, rec.normal)
         else
             Vec.refract(unitDir, rec.normal, refract);
 
         return .{
-            .scattered = Ray.init(rec.point, direction, ray.prng),
+            .scattered = Ray{ .orig = rec.point, .dir = direction },
             .attenuation = Color3{ 1, 1, 1 },
         };
     }
@@ -133,40 +133,35 @@ pub const Material = union(MaterialType) {
         };
     }
 
-    pub fn scatter(self: Material, ray: Ray, rec: Hit) ?Scatter {
+    pub fn scatter(self: Material, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         return switch (self) {
-            .lambertian => |l| l.scatter(ray, rec),
-            .metal => |m| m.scatter(ray, rec),
-            .dielectric => |d| d.scatter(ray, rec),
+            .lambertian => |l| l.scatter(rec, prng),
+            .metal => |m| m.scatter(ray, rec, prng),
+            .dielectric => |d| d.scatter(ray, rec, prng),
         };
     }
 };
 
 test "Scatter" {
-    var prng = DefaultPrng.init(0xcafef00d);
     const s: Scatter = .{
-        .scattered = Ray.init(
-            Vec3{ 0, 0, 0 },
-            Vec3{ 0, 0, -1 },
-            &prng,
-        ),
+        .scattered = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } },
         .attenuation = Color3{ 1, 1, 1 },
     };
 
-    const expectedRay = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
+    const expectedRay = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     try std.testing.expectEqual(expectedRay, s.scattered);
     try std.testing.expectEqual(Color3{ 1, 1, 1 }, s.attenuation);
 }
 
 test "Lambertian" {
     const albedo = Color3{ 1, 1, 1 };
-    var prng = DefaultPrng.init(0xabadcafe);
-    var otherPrng = DefaultPrng.init(0xabadcafe);
+    const seed = 0xabadcafe;
+    var prng = DefaultPrng.init(seed);
+    var otherPrng = DefaultPrng.init(seed);
 
     const lam = Lambertian.init(albedo);
     const normal = Vec3{ 0, 0, 1 };
     const s = lam.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng),
         Hit{
             .point = Vec3{ 0, 0, -1 },
             .normal = normal,
@@ -174,9 +169,10 @@ test "Lambertian" {
             .t = 0,
             .front = true,
         },
+        &prng
     );
     const randVec = Vec.randomUnitVec(&otherPrng);
-    const expectedRay = Ray.init(Vec3{ 0, 0, -1 }, normal + randVec, &prng);
+    const expectedRay = Ray{ .orig = Vec3{ 0, 0, -1 }, .dir = (normal + randVec) };
 
     try std.testing.expectEqual(albedo, lam.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -191,7 +187,7 @@ test "Metal" {
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = metal.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, point, &prng),
+        Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = point },
         Hit{
             .point = point,
             .normal = normal,
@@ -199,8 +195,9 @@ test "Metal" {
             .t = 0,
             .front = true,
         },
+        &prng,
     );
-    const expectedRay = Ray.init(point, Vec.reflect(point, normal), &prng);
+    const expectedRay = Ray{ .orig = point, .dir = Vec.reflect(point, normal) };
 
     try std.testing.expectEqual(albedo, metal.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -209,14 +206,14 @@ test "Metal" {
 
 test "Dielectric" {
     const albedo = Color3{ 1, 1, 1 };
-    var prng = DefaultPrng.init(0xabadcafe);
     const refract = 1.50;
+    var prng = DefaultPrng.init(0xabadcafe);
 
     const dielectric = Dielectric.init(refract);
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = dielectric.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, point, &prng),
+        Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = point },
         Hit{
             .point = point,
             .normal = normal,
@@ -224,8 +221,9 @@ test "Dielectric" {
             .t = 0,
             .front = true,
         },
+        &prng,
     );
-    const expectedRay = Ray.init(point, Vec.refract(point, normal, 1.0 / refract), &prng);
+    const expectedRay = Ray{ .orig = point, .dir = Vec.refract(point, normal, 1.0 / refract) };
 
     try std.testing.expectEqual(refract, dielectric.refractionIndex);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -248,7 +246,7 @@ test "Material" {
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = mat.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng),
+        Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } },
         Hit{
             .point = Vec3{ 0, 0, -1 },
             .normal = Vec3{ 0, 0, 1 },
@@ -256,9 +254,10 @@ test "Material" {
             .t = 0,
             .front = true,
         },
+        &prng,
     );
 
-    const expectedRay = Ray.init(point, Vec.reflect(point, normal), &prng);
+    const expectedRay = Ray{ .orig = point, .dir = Vec.reflect(point, normal) };
 
     try std.testing.expectEqual(albedo, mat.metal.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);

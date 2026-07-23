@@ -1,14 +1,13 @@
 const std = @import("std");
-const Ray = @import("ray.zig").Ray;
-const Vec = @import("vec.zig").Vec;
-const Vec3 = @import("vec.zig").Vec3;
-const Point3 = @import("vec.zig").Point3;
+
+const Color3 = @import("color.zig").Color3;
 const Hit = @import("hittable.zig").Hit;
 const Interval = @import("interval.zig").Interval;
 const Material = @import("material.zig").Material;
-const Color3 = @import("color.zig").Color3;
-
-const DefaultPrng = std.Random.DefaultPrng;
+const Point3 = @import("vec.zig").Point3;
+const Ray = @import("ray.zig").Ray;
+const Vec = @import("vec.zig").Vec;
+const Vec3 = @import("vec.zig").Vec3;
 
 pub const Sphere = struct {
     center: Point3,
@@ -69,8 +68,6 @@ test "init()" {
 }
 
 test "hit() success" {
-    var prng = DefaultPrng.init(0xabadcafe);
-
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
     const mat = Material.init(
@@ -79,7 +76,7 @@ test "hit() success" {
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
+    const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
 
     try std.testing.expect(hitRecord != null);
@@ -90,8 +87,6 @@ test "hit() success" {
 }
 
 test "hit() hit out of range" {
-    var prng = DefaultPrng.init(0xabadcafe);
-
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
     const mat = Material.init(
@@ -100,14 +95,12 @@ test "hit() hit out of range" {
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
+    const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 0.0));
     try std.testing.expect(hitRecord == null);
 }
 
 test "hit() no hit" {
-    var prng = DefaultPrng.init(0xabadcafe);
-
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
     const mat = Material.init(
@@ -116,7 +109,7 @@ test "hit() no hit" {
     );
     const sphere = Sphere.init(center, radius, mat);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, 1 }, &prng);
+    const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, 1 } };
     const hitRecord = sphere.hit(ray, Interval.init(0.0, 3.0));
     try std.testing.expect(hitRecord == null);
 }

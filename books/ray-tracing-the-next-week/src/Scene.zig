@@ -224,7 +224,6 @@ test "Scene" {
 test "Scene.hit()" {
     const alloc = std.testing.allocator;
     const seed = 0xabadcafe;
-    var prng = DefaultPrng.init(seed);
 
     const mat = Material.init(
         .lambertian,
@@ -240,7 +239,7 @@ test "Scene.hit()" {
     scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -4 }, .radius = 1.0, .mat = mat }));
     scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -5 }, .radius = 1.0, .mat = mat }));
 
-    const ray: Ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
+    const ray: Ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     const maybeHit = scene.hit(ray, Interval.init(-6, 6));
 
     try std.testing.expect(maybeHit != null);

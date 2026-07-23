@@ -1,15 +1,15 @@
 const std = @import("std");
-const Vec3 = @import("vec.zig").Vec3;
-const Point3 = @import("vec.zig").Point3;
-const Ray = @import("ray.zig").Ray;
-const Sphere = @import("sphere.zig").Sphere;
-const Interval = @import("interval.zig").Interval;
-const Material = @import("material.zig").Material;
-const Color3 = @import("color.zig").Color3;
-
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const DefaultPrng = std.Random.DefaultPrng;
+
+const Color3 = @import("color.zig").Color3;
+const Interval = @import("interval.zig").Interval;
+const Material = @import("material.zig").Material;
+const Point3 = @import("vec.zig").Point3;
+const Ray = @import("ray.zig").Ray;
+const Sphere = @import("sphere.zig").Sphere;
+const Vec3 = @import("vec.zig").Vec3;
 
 pub const Hit = struct {
     point: Point3,
@@ -76,8 +76,6 @@ test "Object.init()" {
 }
 
 test "Object.hit()" {
-    var prng = DefaultPrng.init(0xabadcafe);
-
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
     const mat = Material.init(
@@ -87,7 +85,7 @@ test "Object.hit()" {
     const sphere = Sphere.init(center, radius, mat);
     const object = Object.init(.sphere, sphere);
 
-    const ray = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
+    const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     const hit = object.hit(ray, Interval.init(0.0, 3.0));
 
     try std.testing.expect(hit != null);
