@@ -11,7 +11,7 @@ height: u16,
 pixels: []Color,
 
 // Use to determine the height for an image given a width and aspect ratio
-pub inline fn getHeightFromWidthAndRatio(comptime width: u16, comptime ratio: f64) u16 {
+pub fn getHeightFromWidthAndRatio(comptime width: u16, comptime ratio: f64) u16 {
     return @intFromFloat(@as(f64, @floatFromInt(width)) / ratio);
 }
 

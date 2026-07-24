@@ -68,7 +68,7 @@ pub const Vec = struct {
         };
     }
 
-    pub inline fn randomUnitVec(prng: *DefaultPrng) Vec3 {
+    pub fn randomUnitVec(prng: *DefaultPrng) Vec3 {
         while (true) {
             const p = Vec.randomRange(-1, 1, prng);
             const lenSq = Vec.lenSquared(p);
@@ -79,7 +79,7 @@ pub const Vec = struct {
         }
     }
 
-    pub inline fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
+    pub fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
         while (true) {
             const p = Vec3{
                 util.randomDoubleRange(-1, 1, prng),
@@ -91,7 +91,7 @@ pub const Vec = struct {
         }
     }
 
-    pub inline fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
+    pub fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
         const onUnitSphere = Vec.randomUnitVec(prng);
         if (Vec.dot(onUnitSphere, normal) > 0.0) {
             return onUnitSphere;

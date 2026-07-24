@@ -177,7 +177,7 @@ pub const Camera = struct {
         std.log.debug("Thread {d}: -----[DONE (idle)]-----", .{ threadNum + 1 });
     }
 
-    inline fn percentComplete(row: usize, height: usize) usize {
+    fn percentComplete(row: usize, height: usize) usize {
         return row * 100 / height;
     }
 

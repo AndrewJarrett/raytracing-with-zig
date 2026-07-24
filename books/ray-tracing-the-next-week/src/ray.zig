@@ -11,7 +11,7 @@ pub const Ray = struct {
     dir: Vec3 = Vec3{ 0, 0, 0 },
     time: f64 = 0,
 
-    pub inline fn at(self: Ray, t: f64) Vec3 {
+    pub fn at(self: Ray, t: f64) Vec3 {
         return self.orig + (self.dir * Vec.splat(t));
     }
 

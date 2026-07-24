@@ -34,9 +34,9 @@ pub const Object = union(Shape) {
         };
     }
 
-    pub inline fn hit(self: Object, ray: Ray, t: Interval) ?Hit {
+    pub fn hit(self: Object, ray: Ray, t: Interval) ?Hit {
         return switch (self) {
-            inline .sphere => |s| s.hit(ray, t), // Doh!
+            .sphere => |s| s.hit(ray, t), // Doh!
         };
     }
 };

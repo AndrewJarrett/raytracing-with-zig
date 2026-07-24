@@ -72,7 +72,7 @@ pub const Color = struct {
         };
     }
 
-    inline fn linearToGamma(linear: f64) f64 {
+    fn linearToGamma(linear: f64) f64 {
         return if (linear > 0) @sqrt(linear) else 0;
     }
 

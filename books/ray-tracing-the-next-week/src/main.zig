@@ -49,7 +49,7 @@ pub fn main(init: std.process.Init) !void {
     try camera.render(threaded.io());
 }
 
-inline fn initSeed(io: Io) u64 {
+fn initSeed(io: Io) u64 {
     if (config.seed) |s| {
         return s;
     } else {
@@ -59,7 +59,7 @@ inline fn initSeed(io: Io) u64 {
     }
 }
 
-inline fn initCamera(image: Image, scene: Scene) Camera {
+fn initCamera(image: Image, scene: Scene) Camera {
     // Build Camera
     return Camera.builder(image, scene)
         .setDefocusAngle(0.6)

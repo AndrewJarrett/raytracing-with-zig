@@ -25,7 +25,15 @@ pub const Sphere = struct {
         };
     }
 
-    pub inline fn hit(self: Sphere, ray: Ray, t: Interval) ?Hit {
+    pub fn initMoving(start: Point3, end: Point3, radius: f64, mat: Material) Sphere {
+        return .{
+            .center = Ray{ .orig = start, .dir = (end - start) },
+            .radius = @max(0, radius),
+            .mat = mat,
+        };
+    }
+
+    pub fn hit(self: Sphere, ray: Ray, t: Interval) ?Hit {
         const current_center = self.center.at(ray.time);
         const oc = current_center - ray.orig;
         const a = Vec.lenSquared(ray.dir);
@@ -60,10 +68,7 @@ pub const Sphere = struct {
 test "init()" {
     const center = Ray{};
     const radius = 1.0;
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
     const sphere = Sphere.init(center.orig, radius, mat);
 
     try std.testing.expectEqual(Sphere, @TypeOf(sphere));
@@ -79,10 +84,7 @@ test "initMoving()" {
     const start = Point3{ 0, 0, 0 };
     const end = Point3{ 0, 1, 1 };
     const radius = 1.0;
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
     const sphere = Sphere.initMoving(start, end, radius, mat);
 
     try std.testing.expectEqual(Sphere, @TypeOf(sphere));
@@ -97,10 +99,7 @@ test "initMoving()" {
 test "hit() success" {
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
     const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
@@ -116,10 +115,7 @@ test "hit() success" {
 test "hit() hit out of range" {
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
     const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
@@ -130,10 +126,7 @@ test "hit() hit out of range" {
 test "hit() no hit" {
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
     const sphere = Sphere.init(center, radius, mat);
 
     const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, 1 } };

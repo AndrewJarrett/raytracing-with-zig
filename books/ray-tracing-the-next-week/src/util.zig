@@ -5,19 +5,19 @@ const DefaultPrng = std.Random.DefaultPrng;
 pub const pi = std.math.pi;
 
 /// Convert degrees to radians as an f64
-pub inline fn degToRad(degrees: f64) f64 {
+pub fn degToRad(degrees: f64) f64 {
     return degrees * std.math.pi / 180.0;
 }
 
 /// Return a double/f64 in the range of [0,1).
 /// Can use a deterministic seed if provided, otherwise,
 /// will use the OS to get a random seed.
-pub inline fn randomDouble(prng: *DefaultPrng) f64 {
+pub fn randomDouble(prng: *DefaultPrng) f64 {
     return prng.random().float(f64);
 }
 
 /// Return a random double/f64 in a specific range of [min,max)
-pub inline fn randomDoubleRange(min: f64, max: f64, prng: *DefaultPrng) f64 {
+pub fn randomDoubleRange(min: f64, max: f64, prng: *DefaultPrng) f64 {
     return min + (max - min) * randomDouble(prng);
 }
 
