@@ -3,88 +3,92 @@ const std = @import("std");
 const posInf = std.math.inf(f64);
 const negInf = -std.math.inf(f64);
 
-pub const Interval = struct {
-    min: f64 = posInf,
-    max: f64 = negInf,
+const Self = @This();
+min: f64 = posInf,
+max: f64 = negInf,
 
-    pub fn empty() Interval {
-        return .{};
-    }
+pub fn empty() Self {
+    return .{};
+}
 
-    pub fn universe() Interval {
-        return .{
-            .min = negInf,
-            .max = posInf,
-        };
-    }
+pub fn universe() Self {
+    return .{
+        .min = negInf,
+        .max = posInf,
+    };
+}
 
-    pub fn init(iMin: f64, iMax: f64) Interval {
-        return .{
-            .min = iMin,
-            .max = iMax,
-        };
-    }
+pub fn init(iMin: f64, iMax: f64) Self {
+    return .{
+        .min = iMin,
+        .max = iMax,
+    };
+}
 
-    pub fn size(self: Interval) f64 {
-        return self.max - self.min;
-    }
+pub fn size(self: Self) f64 {
+    return self.max - self.min;
+}
 
-    pub fn contains(self: Interval, x: f64) bool {
-        return self.min <= x and x <= self.max;
-    }
+pub fn contains(self: Self, x: f64) bool {
+    return self.min <= x and x <= self.max;
+}
 
-    pub fn surrounds(self: Interval, x: f64) bool {
-        return self.min < x and x < self.max;
-    }
+pub fn surrounds(self: Self, x: f64) bool {
+    return self.min < x and x < self.max;
+}
 
-    pub fn clamp(self: Interval, x: f64) f64 {
-        return if (x < self.min)
-            self.min
-        else if (x > self.max)
-            self.max
-        else
-            x;
-    }
-};
+pub fn clamp(self: Self, x: f64) f64 {
+    return if (x < self.min)
+        self.min
+    else if (x > self.max)
+        self.max
+    else
+        x;
+}
+
+pub fn expand(self: Self, delta: f64) Self {
+    const padding = delta / 2;
+    return Self.init(self.min - padding, self.max + padding);
+}
 
 test "empty()" {
-    const empty = Interval.empty();
+    const emp = Self.empty();
 
-    try std.testing.expectEqual(posInf, empty.min);
-    try std.testing.expectEqual(negInf, empty.max);
+    try std.testing.expectEqual(posInf, emp.min);
+    try std.testing.expectEqual(negInf, emp.max);
 }
 
 test "universe()" {
-    const universe = Interval.universe();
+    const universeInterval = Self.universe();
 
-    try std.testing.expectEqual(negInf, universe.min);
-    try std.testing.expectEqual(posInf, universe.max);
+    try std.testing.expectEqual(negInf, universeInterval.min);
+    try std.testing.expectEqual(posInf, universeInterval.max);
 }
 
 test "init()" {
-    const int = Interval.init(0, 2);
-    const empty = Interval{};
+    const int = Self.init(0, 2);
+    const emp = Self{};
 
     try std.testing.expectEqual(0, int.min);
     try std.testing.expectEqual(2, int.max);
-    try std.testing.expectEqual(posInf, empty.min);
-    try std.testing.expectEqual(negInf, empty.max);
+    try std.testing.expectEqual(posInf, emp.min);
+    try std.testing.expectEqual(negInf, emp.max);
 }
 
 test "size()" {
-    const int = Interval.init(0, 2);
-    const empty = Interval.empty();
-    const uni = Interval.universe();
+    const int = Self.init(0, 2);
+    const emp = Self.empty();
+    const uni = Self.universe();
 
     try std.testing.expectEqual(2, int.size());
-    try std.testing.expectEqual(negInf, empty.size());
+    try std.testing.expectEqual(negInf, emp.size());
     try std.testing.expectEqual(posInf, uni.size());
 }
 
 test "contains()" {
-    const int = Interval.init(0, 2);
-    const empty = Interval.empty();
-    const uni = Interval.universe();
+    const int = Self.init(0, 2);
+    const emp = Self.empty();
+    const uni = Self.universe();
 
     try std.testing.expect(int.contains(0));
     try std.testing.expect(int.contains(1));
@@ -100,15 +104,15 @@ test "contains()" {
     try std.testing.expect(!int.contains(2.0000001));
     try std.testing.expect(!int.contains(5));
     try std.testing.expect(!int.contains(-5));
-    try std.testing.expect(!empty.contains(negInf));
-    try std.testing.expect(!empty.contains(posInf));
-    try std.testing.expect(!empty.contains(0));
+    try std.testing.expect(!emp.contains(negInf));
+    try std.testing.expect(!emp.contains(posInf));
+    try std.testing.expect(!emp.contains(0));
 }
 
 test "surrounds()" {
-    const int = Interval.init(0, 2);
-    const empty = Interval.empty();
-    const uni = Interval.universe();
+    const int = Self.init(0, 2);
+    const emp = Self.empty();
+    const uni = Self.universe();
 
     try std.testing.expect(int.surrounds(0.00001));
     try std.testing.expect(int.surrounds(1));
@@ -122,17 +126,17 @@ test "surrounds()" {
     try std.testing.expect(!int.surrounds(2));
     try std.testing.expect(!int.surrounds(5));
     try std.testing.expect(!int.surrounds(-5));
-    try std.testing.expect(!empty.surrounds(negInf));
-    try std.testing.expect(!empty.surrounds(posInf));
-    try std.testing.expect(!empty.contains(0));
+    try std.testing.expect(!emp.surrounds(negInf));
+    try std.testing.expect(!emp.surrounds(posInf));
+    try std.testing.expect(!emp.contains(0));
     try std.testing.expect(!uni.surrounds(negInf));
     try std.testing.expect(!uni.surrounds(posInf));
 }
 
 test "clamp()" {
-    const int = Interval.init(0, 2);
-    const empty = Interval.empty();
-    const uni = Interval.universe();
+    const int = Self.init(0, 2);
+    const emp = Self.empty();
+    const uni = Self.universe();
 
     try std.testing.expectEqual(0, int.clamp(0));
     try std.testing.expectEqual(0, int.clamp(-1));
@@ -140,11 +144,11 @@ test "clamp()" {
     try std.testing.expectEqual(2, int.clamp(2));
     try std.testing.expectEqual(2, int.clamp(3));
 
-    try std.testing.expectEqual(posInf, empty.clamp(0));
-    try std.testing.expectEqual(posInf, empty.clamp(-1));
-    try std.testing.expectEqual(posInf, empty.clamp(1));
-    try std.testing.expectEqual(negInf, empty.clamp(posInf));
-    try std.testing.expectEqual(posInf, empty.clamp(negInf));
+    try std.testing.expectEqual(posInf, emp.clamp(0));
+    try std.testing.expectEqual(posInf, emp.clamp(-1));
+    try std.testing.expectEqual(posInf, emp.clamp(1));
+    try std.testing.expectEqual(negInf, emp.clamp(posInf));
+    try std.testing.expectEqual(posInf, emp.clamp(negInf));
 
     try std.testing.expectEqual(0, uni.clamp(0));
     try std.testing.expectEqual(-1, uni.clamp(-1));

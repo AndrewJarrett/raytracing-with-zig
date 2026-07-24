@@ -1,12 +1,12 @@
 const std = @import("std");
-const util = @import("util.zig");
-const Ray = @import("ray.zig").Ray;
-const Hit = @import("hittable.zig").Hit;
+const DefaultPrng = std.Random.DefaultPrng;
+
 const Color3 = @import("color.zig").Color3;
+const Hit = @import("hittable.zig").Hit;
+const Ray = @import("ray.zig").Ray;
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
-
-const DefaultPrng = std.Random.DefaultPrng;
+const util = @import("util.zig");
 
 pub const Scatter = struct {
     scattered: Ray,
@@ -14,47 +14,34 @@ pub const Scatter = struct {
 };
 
 pub const Lambertian = struct {
-    albedo: Color3,
+    albedo: Color3 = Color3{ 1, 1, 1 },
 
-    pub fn init(albedo: Color3) Lambertian {
-        return .{
-            .albedo = albedo,
-        };
-    }
-
-    pub fn scatter(self: Lambertian, ray: Ray, rec: Hit) ?Scatter {
-        var dir = rec.normal + Vec.randomUnitVec(ray.prng);
+    pub fn scatter(self: Lambertian, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
+        var dir = rec.normal + Vec.randomUnitVec(prng);
         if (Vec.nearZero(dir)) {
             dir = rec.normal;
         }
 
         return .{
-            .scattered = Ray.init(rec.point, dir, ray.prng),
+            .scattered = Ray{ .orig = rec.point, .dir = dir, .time = ray.time },
             .attenuation = self.albedo,
         };
     }
 };
 
 pub const Metal = struct {
-    albedo: Color3,
-    fuzz: f64,
+    albedo: Color3 = Color3{ 1, 1, 1 },
+    fuzz: f64 = 0,
 
-    pub fn init(albedo: Color3, fuzz: f64) Metal {
-        return .{
-            .albedo = albedo,
-            .fuzz = fuzz,
-        };
-    }
-
-    pub fn scatter(self: Metal, ray: Ray, rec: Hit) ?Scatter {
+    pub fn scatter(self: Metal, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         var s: ?Scatter = null;
 
         const reflected = Vec.unit(Vec.reflect(ray.dir, rec.normal)) +
-            Vec.mulScalar(Vec.randomUnitVec(ray.prng), self.fuzz);
+            Vec.mulScalar(Vec.randomUnitVec(prng), self.fuzz);
 
         if (Vec.dot(reflected, rec.normal) > 0) {
             s = .{
-                .scattered = Ray.init(rec.point, reflected, ray.prng),
+                .scattered = Ray{ .orig = rec.point, .dir = reflected, .time = ray.time },
                 .attenuation = self.albedo,
             };
         }
@@ -63,15 +50,9 @@ pub const Metal = struct {
 };
 
 pub const Dielectric = struct {
-    refractionIndex: f64,
+    refractionIndex: f64 = 1.0,
 
-    pub fn init(refractionIndex: f64) Dielectric {
-        return .{
-            .refractionIndex = refractionIndex,
-        };
-    }
-
-    pub fn scatter(self: Dielectric, ray: Ray, rec: Hit) ?Scatter {
+    pub fn scatter(self: Dielectric, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         const refract = if (rec.front)
             1.0 / self.refractionIndex
         else
@@ -83,13 +64,13 @@ pub const Dielectric = struct {
 
         const cannotRefract = refract * sinTheta > 1.0;
         const approxReflect = Dielectric.reflectance(cosTheta, refract);
-        const direction = if (cannotRefract or approxReflect > util.randomDouble(ray.prng))
+        const direction = if (cannotRefract or approxReflect > util.randomDouble(prng))
             Vec.reflect(unitDir, rec.normal)
         else
             Vec.refract(unitDir, rec.normal, refract);
 
         return .{
-            .scattered = Ray.init(rec.point, direction, ray.prng),
+            .scattered = Ray{ .orig = rec.point, .dir = direction, .time = ray.time },
             .attenuation = Color3{ 1, 1, 1 },
         };
     }
@@ -108,75 +89,61 @@ pub const MaterialType = enum {
     dielectric,
 };
 
-pub const MaterialArgs = struct {
-    albedo: Color3 = Color3{ 1, 1, 1 },
-    fuzz: f64 = 0,
-    refractionIndex: f64 = 1.0,
-};
-
 pub const Material = union(MaterialType) {
     lambertian: Lambertian,
     metal: Metal,
     dielectric: Dielectric,
 
-    pub fn init(mat: MaterialType, args: MaterialArgs) Material {
-        return switch (mat) {
-            .lambertian => .{
-                .lambertian = Lambertian.init(args.albedo),
-            },
-            .metal => .{
-                .metal = Metal.init(args.albedo, args.fuzz),
-            },
-            .dielectric => .{
-                .dielectric = Dielectric.init(args.refractionIndex),
-            },
+    pub fn init(mat: anytype) Material {
+        return switch (@TypeOf(mat)) {
+            Lambertian => .{ .lambertian = mat },
+            Metal => .{ .metal = mat },
+            Dielectric => .{ .dielectric = mat },
+            else => @compileError("Unknown material: " ++ @typeName(@TypeOf(mat))),
         };
     }
 
-    pub fn scatter(self: Material, ray: Ray, rec: Hit) ?Scatter {
+    pub fn scatter(self: Material, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         return switch (self) {
-            .lambertian => |l| l.scatter(ray, rec),
-            .metal => |m| m.scatter(ray, rec),
-            .dielectric => |d| d.scatter(ray, rec),
+            .lambertian => |l| l.scatter(ray, rec, prng),
+            .metal => |m| m.scatter(ray, rec, prng),
+            .dielectric => |d| d.scatter(ray, rec, prng),
         };
     }
 };
 
 test "Scatter" {
-    var prng = DefaultPrng.init(0xcafef00d);
     const s: Scatter = .{
-        .scattered = Ray.init(
-            Vec3{ 0, 0, 0 },
-            Vec3{ 0, 0, -1 },
-            &prng,
-        ),
+        .scattered = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } },
         .attenuation = Color3{ 1, 1, 1 },
     };
 
-    const expectedRay = Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng);
+    const expectedRay = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     try std.testing.expectEqual(expectedRay, s.scattered);
     try std.testing.expectEqual(Color3{ 1, 1, 1 }, s.attenuation);
 }
 
 test "Lambertian" {
     const albedo = Color3{ 1, 1, 1 };
-    var prng = DefaultPrng.init(0xabadcafe);
-    var otherPrng = DefaultPrng.init(0xabadcafe);
+    const seed = 0xabadcafe;
+    var prng = DefaultPrng.init(seed);
+    var otherPrng = DefaultPrng.init(seed);
 
-    const lam = Lambertian.init(albedo);
+    const lam = Lambertian{ .albedo = albedo };
     const normal = Vec3{ 0, 0, 1 };
     const s = lam.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng),
+        Ray{},
         Hit{
             .point = Vec3{ 0, 0, -1 },
             .normal = normal,
-            .mat = Material.init(.lambertian, .{ .albedo = albedo }),
+            .mat = Material.init(Lambertian{ .albedo = albedo }),
             .t = 0,
             .front = true,
         },
+        &prng
     );
     const randVec = Vec.randomUnitVec(&otherPrng);
-    const expectedRay = Ray.init(Vec3{ 0, 0, -1 }, normal + randVec, &prng);
+    const expectedRay = Ray{ .orig = Vec3{ 0, 0, -1 }, .dir = (normal + randVec) };
 
     try std.testing.expectEqual(albedo, lam.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -187,20 +154,21 @@ test "Metal" {
     const albedo = Color3{ 1, 1, 1 };
     var prng = DefaultPrng.init(0xabadcafe);
 
-    const metal = Metal.init(albedo, 0);
+    const metal = Metal{ .albedo = albedo, .fuzz = 0 };
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = metal.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, point, &prng),
+        Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = point },
         Hit{
             .point = point,
             .normal = normal,
-            .mat = Material.init(.metal, .{ .albedo = albedo, .fuzz = 0 }),
+            .mat = Material.init(Metal{ .albedo = albedo, .fuzz = 0 }),
             .t = 0,
             .front = true,
         },
+        &prng,
     );
-    const expectedRay = Ray.init(point, Vec.reflect(point, normal), &prng);
+    const expectedRay = Ray{ .orig = point, .dir = Vec.reflect(point, normal) };
 
     try std.testing.expectEqual(albedo, metal.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -209,23 +177,24 @@ test "Metal" {
 
 test "Dielectric" {
     const albedo = Color3{ 1, 1, 1 };
-    var prng = DefaultPrng.init(0xabadcafe);
     const refract = 1.50;
+    var prng = DefaultPrng.init(0xabadcafe);
 
-    const dielectric = Dielectric.init(refract);
+    const dielectric = Dielectric{ .refractionIndex = refract };
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = dielectric.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, point, &prng),
+        Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = point },
         Hit{
             .point = point,
             .normal = normal,
-            .mat = Material.init(.dielectric, .{ .refractionIndex = refract }),
+            .mat = Material.init(Dielectric{ .refractionIndex = refract }),
             .t = 0,
             .front = true,
         },
+        &prng,
     );
-    const expectedRay = Ray.init(point, Vec.refract(point, normal, 1.0 / refract), &prng);
+    const expectedRay = Ray{ .orig = point, .dir = Vec.refract(point, normal, 1.0 / refract) };
 
     try std.testing.expectEqual(refract, dielectric.refractionIndex);
     try std.testing.expectEqual(albedo, s.?.attenuation);
@@ -244,11 +213,11 @@ test "Material" {
     const albedo = Color3{ 1, 1, 1 };
     var prng = DefaultPrng.init(0xabadcafe);
 
-    const mat = Material.init(.metal, .{ .albedo = albedo, .fuzz = 0 });
+    const mat = Material.init(Metal{ .albedo = albedo, .fuzz = 0 });
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = mat.scatter(
-        Ray.init(Vec3{ 0, 0, 0 }, Vec3{ 0, 0, -1 }, &prng),
+        Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } },
         Hit{
             .point = Vec3{ 0, 0, -1 },
             .normal = Vec3{ 0, 0, 1 },
@@ -256,9 +225,10 @@ test "Material" {
             .t = 0,
             .front = true,
         },
+        &prng,
     );
 
-    const expectedRay = Ray.init(point, Vec.reflect(point, normal), &prng);
+    const expectedRay = Ray{ .orig = point, .dir = Vec.reflect(point, normal) };
 
     try std.testing.expectEqual(albedo, mat.metal.albedo);
     try std.testing.expectEqual(albedo, s.?.attenuation);

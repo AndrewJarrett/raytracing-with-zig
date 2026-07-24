@@ -1,7 +1,9 @@
 const std = @import("std");
+const DefaultPrng = std.Random.DefaultPrng;
+const assert = std.debug.assert;
+
 const util = @import("util.zig");
 
-const DefaultPrng = std.Random.DefaultPrng;
 pub const Vec3 = @Vector(3, f64);
 pub const Point3 = Vec3;
 
@@ -37,9 +39,7 @@ pub const Vec = struct {
     }
 
     pub inline fn divScalar(v: Vec3, scalar: f64) Vec3 {
-        if (scalar == 0) {
-            @panic("Trying to divide by zero!");
-        }
+        assert(scalar != 0);
 
         return v * Vec.splat(1.0 / scalar);
     }
@@ -62,13 +62,13 @@ pub const Vec = struct {
 
     pub inline fn randomRange(min: f64, max: f64, prng: *DefaultPrng) Vec3 {
         return .{
-            util.randomDoubleRange(min, max, prng),
-            util.randomDoubleRange(min, max, prng),
-            util.randomDoubleRange(min, max, prng),
+            util.randomDoubleRange(prng, min, max),
+            util.randomDoubleRange(prng, min, max),
+            util.randomDoubleRange(prng, min, max),
         };
     }
 
-    pub inline fn randomUnitVec(prng: *DefaultPrng) Vec3 {
+    pub fn randomUnitVec(prng: *DefaultPrng) Vec3 {
         while (true) {
             const p = Vec.randomRange(-1, 1, prng);
             const lenSq = Vec.lenSquared(p);
@@ -79,11 +79,11 @@ pub const Vec = struct {
         }
     }
 
-    pub inline fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
+    pub fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
         while (true) {
             const p = Vec3{
-                util.randomDoubleRange(-1, 1, prng),
-                util.randomDoubleRange(-1, 1, prng),
+                util.randomDoubleRange(prng, -1, 1),
+                util.randomDoubleRange(prng, -1, 1),
                 0,
             };
             const lenSq = Vec.lenSquared(p);
@@ -91,7 +91,7 @@ pub const Vec = struct {
         }
     }
 
-    pub inline fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
+    pub fn randomOnHemisphere(normal: Vec3, prng: *DefaultPrng) Vec3 {
         const onUnitSphere = Vec.randomUnitVec(prng);
         if (Vec.dot(onUnitSphere, normal) > 0.0) {
             return onUnitSphere;

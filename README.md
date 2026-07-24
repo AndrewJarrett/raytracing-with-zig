@@ -1,7 +1,7 @@
 # raytracing-with-zig
 This repo contains folders for work related to the following books on raytracing:
-1. (Ray Tracing in One Weekend)[https://raytracing.github.io/books/RayTracingInOneWeekend.html]
-2. (Ray Tracing the Next Week)[https://raytracing.github.io/books/RayTracingTheNextWeek.html]
+1. [Ray Tracing in One Weekend](https://raytracing.github.io/books/RayTracingInOneWeekend.html)
+2. [Ray Tracing the Next Week](https://raytracing.github.io/books/RayTracingTheNextWeek.html)
 
 # Building and Running
 To build the tracer for each book, you must `cd` into the book's folder and run the following commands.

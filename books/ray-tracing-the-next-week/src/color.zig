@@ -1,6 +1,6 @@
 const std = @import("std");
 const Vec3 = @import("vec.zig").Vec3;
-const Interval = @import("interval.zig").Interval;
+const Interval = @import("Interval.zig");
 
 pub const Color3 = Vec3;
 
@@ -72,7 +72,7 @@ pub const Color = struct {
         };
     }
 
-    inline fn linearToGamma(linear: f64) f64 {
+    fn linearToGamma(linear: f64) f64 {
         return if (linear > 0) @sqrt(linear) else 0;
     }
 

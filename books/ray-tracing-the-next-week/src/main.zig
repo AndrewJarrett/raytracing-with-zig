@@ -33,10 +33,10 @@ pub fn main(init: std.process.Init) !void {
     var threaded = std.Io.Threaded.init(gpa, .{});
     defer threaded.deinit();
 
-    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter14));
+    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter2));
     defer alloc.free(world);
     var scene = Scene{ .seed = seed, .world = world };
-    scene.generateScene(.chapter14);
+    scene.generateScene(.chapter2);
 
     // Create Image
     const height = Image.getHeightFromWidthAndRatio(config.imgWidth, config.aspectRatio);
@@ -49,7 +49,7 @@ pub fn main(init: std.process.Init) !void {
     try camera.render(threaded.io());
 }
 
-inline fn initSeed(io: Io) u64 {
+fn initSeed(io: Io) u64 {
     if (config.seed) |s| {
         return s;
     } else {
@@ -59,7 +59,7 @@ inline fn initSeed(io: Io) u64 {
     }
 }
 
-inline fn initCamera(image: Image, scene: Scene) Camera {
+fn initCamera(image: Image, scene: Scene) Camera {
     // Build Camera
     return Camera.builder(image, scene)
         .setDefocusAngle(0.6)
@@ -77,20 +77,20 @@ test "main" {
 
     try std.testing.expect(config.imgWidth == 400);
     try std.testing.expect(config.aspectRatio == (16.0 / 9.0));
-    try std.testing.expect(config.samplesPerPixel == 10);
+    try std.testing.expect(config.samplesPerPixel == 100);
     try std.testing.expect(config.seed != null);
 
     // Test main()
     const io = std.testing.io;
     const gpa = std.testing.allocator;
 
-    const world = try gpa.alloc(Object, @intFromEnum(SceneType.chapter14));
+    const world = try gpa.alloc(Object, @intFromEnum(SceneType.chapter2));
     defer gpa.free(world);
 
     // Use or generate a common seed
     const seed = initSeed(io);
     var scene = Scene{ .seed = seed, .world = world };
-    scene.generateScene(.chapter14);
+    scene.generateScene(.chapter2);
 
     const height = Image.getHeightFromWidthAndRatio(config.imgWidth, config.aspectRatio);
     const size = @as(u32, config.imgWidth) * @as(u32, height);
