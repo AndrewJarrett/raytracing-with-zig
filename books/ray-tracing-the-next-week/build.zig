@@ -74,7 +74,7 @@ pub fn build(b: *std.Build) void {
 
     const testOptions = b.addOptions();
     testOptions.addOption(u16, "imgWidth", 400);
-    testOptions.addOption(u16, "samplesPerPixel", 10);
+    testOptions.addOption(u16, "samplesPerPixel", 100);
     testOptions.addOption(f64, "aspectRatio", (16.0 / 9.0));
     testOptions.addOption([]const u8, "fileName", fileName);
     testOptions.addOption(?u64, "seed", 0xdeadbeef);

@@ -77,7 +77,7 @@ test "main" {
 
     try std.testing.expect(config.imgWidth == 400);
     try std.testing.expect(config.aspectRatio == (16.0 / 9.0));
-    try std.testing.expect(config.samplesPerPixel == 10);
+    try std.testing.expect(config.samplesPerPixel == 100);
     try std.testing.expect(config.seed != null);
 
     // Test main()

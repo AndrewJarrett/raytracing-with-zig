@@ -88,21 +88,23 @@ fn generateChapter2(self: *Self) void {
             };
 
             if (Vec.len(center - Point3{ 4, 0.2, 0 }) > 0.9) {
-                // 5% chance of glass
-                var sphereMaterial = Material.init(Dielectric{ .refractionIndex = 1.5 });
-
                 if (chooseMat < 0.8) {
                     // 80% is diffuse material
                     const albedo = Vec.random(&prng) * Vec.random(&prng);
-                    sphereMaterial = Material.init(Lambertian{ .albedo = albedo });
+                    const sphereMaterial = Material.init(Lambertian{ .albedo = albedo });
+                    const final = center + Vec3{ 0, util.randomDoubleRange(&prng, 0, 0.5), 0 };
+                    self.append(Object.init(Sphere.initMoving(center, final, 0.2, sphereMaterial)));
                 } else if (chooseMat < 0.95) {
                     // 15% metal
                     const albedo = Vec.randomRange(0.5, 1, &prng);
-                    const fuzz = util.randomDoubleRange(0, 0.5, &prng);
-                    sphereMaterial = Material.init(Metal{ .albedo = albedo, .fuzz = fuzz });
+                    const fuzz = util.randomDoubleRange(&prng, 0, 0.5);
+                    const sphereMaterial = Material.init(Metal{ .albedo = albedo, .fuzz = fuzz });
+                    self.append(Object.init(Sphere.init(center, 0.2, sphereMaterial)));
+                } else {
+                    // 5% chance of glass
+                    const sphereMaterial = Material.init(Dielectric{ .refractionIndex = 1.5 });
+                    self.append(Object.init(Sphere.init(center, 0.2, sphereMaterial)));
                 }
-
-                self.append(Object.init(Sphere.init(center, 0.2, sphereMaterial)));
             }
         }
     }

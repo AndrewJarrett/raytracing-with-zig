@@ -62,9 +62,9 @@ pub const Vec = struct {
 
     pub inline fn randomRange(min: f64, max: f64, prng: *DefaultPrng) Vec3 {
         return .{
-            util.randomDoubleRange(min, max, prng),
-            util.randomDoubleRange(min, max, prng),
-            util.randomDoubleRange(min, max, prng),
+            util.randomDoubleRange(prng, min, max),
+            util.randomDoubleRange(prng, min, max),
+            util.randomDoubleRange(prng, min, max),
         };
     }
 
@@ -82,8 +82,8 @@ pub const Vec = struct {
     pub fn randomInUnitDisk(prng: *DefaultPrng) Vec3 {
         while (true) {
             const p = Vec3{
-                util.randomDoubleRange(-1, 1, prng),
-                util.randomDoubleRange(-1, 1, prng),
+                util.randomDoubleRange(prng, -1, 1),
+                util.randomDoubleRange(prng, -1, 1),
                 0,
             };
             const lenSq = Vec.lenSquared(p);

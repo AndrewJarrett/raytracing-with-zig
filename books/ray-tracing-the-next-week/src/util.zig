@@ -17,7 +17,7 @@ pub fn randomDouble(prng: *DefaultPrng) f64 {
 }
 
 /// Return a random double/f64 in a specific range of [min,max)
-pub fn randomDoubleRange(min: f64, max: f64, prng: *DefaultPrng) f64 {
+pub fn randomDoubleRange(prng: *DefaultPrng, min: f64, max: f64) f64 {
     return min + (max - min) * randomDouble(prng);
 }
 
@@ -68,7 +68,7 @@ test "randomDoubleRange()" {
     const max = 10.0;
     for (0..tests) |t| {
         const i = @as(f64, @floatFromInt(t));
-        const result = randomDoubleRange(i + min, i + max, &prng);
+        const result = randomDoubleRange(&prng, i + min, i + max);
         try std.testing.expect(i + min <= result and result < i + max);
     }
 
@@ -76,11 +76,11 @@ test "randomDoubleRange()" {
     // generate the same number when given the same seed.
     var seededPrng = DefaultPrng.init(0xcafef00d);
     var newSeededPrng = DefaultPrng.init(0xcafef00d);
-    const expected = randomDoubleRange(-1, 0, &seededPrng);
-    const actual = randomDoubleRange(-1, 0, &newSeededPrng);
+    const expected = randomDoubleRange(&seededPrng, -1, 0);
+    const actual = randomDoubleRange(&newSeededPrng, -1, 0);
     try std.testing.expectEqual(expected, actual);
 
     // Ensure that the next random number is different from the prior call of
     // the random function when provided a Random struct that is seeded
-    try std.testing.expect(expected != randomDoubleRange(-1, 0, &seededPrng));
+    try std.testing.expect(expected != randomDoubleRange(&seededPrng, -1, 0));
 }
