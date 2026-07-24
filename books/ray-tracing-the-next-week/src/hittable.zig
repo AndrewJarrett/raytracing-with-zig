@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const DefaultPrng = std.Random.DefaultPrng;
 
 const Color3 = @import("color.zig").Color3;
-const Interval = @import("interval.zig").Interval;
+const Interval = @import("Interval.zig");
 const Material = @import("material.zig").Material;
 const Point3 = @import("vec.zig").Point3;
 const Ray = @import("ray.zig").Ray;

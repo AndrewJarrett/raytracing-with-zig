@@ -1,7 +1,9 @@
 const std = @import("std");
+const DefaultPrng = std.Random.DefaultPrng;
+const assert = std.debug.assert;
+
 const util = @import("util.zig");
 
-const DefaultPrng = std.Random.DefaultPrng;
 pub const Vec3 = @Vector(3, f64);
 pub const Point3 = Vec3;
 
@@ -37,9 +39,7 @@ pub const Vec = struct {
     }
 
     pub inline fn divScalar(v: Vec3, scalar: f64) Vec3 {
-        if (scalar == 0) {
-            @panic("Trying to divide by zero!");
-        }
+        assert(scalar != 0);
 
         return v * Vec.splat(1.0 / scalar);
     }
