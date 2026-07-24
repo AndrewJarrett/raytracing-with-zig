@@ -435,7 +435,7 @@ test "CameraBuilder" {
 
     const vFov = 90;
 
-    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter14));
+    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter2));
     defer alloc.free(world);
     const otherScene = Scene{ .seed = seed, .world = world};
     builder = builder.setScene(otherScene);
@@ -495,7 +495,7 @@ test "Camera" {
     const height: f64 = 2.0 * @tan(degToRad(vFov) / 2.0);
 
     const seed = 0xdeadbeef;
-    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter14));
+    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter2));
     defer alloc.free(world);
     const scene = Scene{ .seed = seed, .world = world };
 

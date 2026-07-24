@@ -5,12 +5,16 @@ const ArrayList = std.ArrayList;
 const assert = std.debug.assert;
 
 const Color3 = @import("color.zig").Color3;
+const Dielectric = @import("material.zig").Dielectric;
 const Hit = @import("hittable.zig").Hit;
 const Interval = @import("interval.zig").Interval;
+const Lambertian = @import("material.zig").Lambertian;
 const Material = @import("material.zig").Material;
+const Metal = @import("material.zig").Metal;
 const Object = @import("hittable.zig").Object;
 const Point3 = @import("vec.zig").Point3;
 const Ray = @import("ray.zig").Ray;
+const Sphere = @import("sphere.zig").Sphere;
 const util = @import("util.zig");
 const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
@@ -25,8 +29,7 @@ interval: Interval = Interval.init(1e-3, inf), // Default - edit field directly 
 
 // The enum value is the size of the scene (number of objects)
 pub const SceneType = enum(u16) {
-    chapter13 = 5,
-    chapter14 = (1 + 22 * 22 + 3),
+    chapter2 = (1 + 22 * 22 + 3),
 };
 
 pub fn hit(self: Self, ray: Ray, t: Interval) ?Hit {
@@ -58,26 +61,18 @@ pub fn objects(self: Self) []Object {
 
 pub fn generateScene(self: *Self, comptime sceneType: @EnumLiteral()) void {
     switch (sceneType) {
-        .chapter13 => self.generateChapter13(),
-        .chapter14 => self.generateChapter14(),
+        .chapter2 => self.generateChapter2(),
         else => @compileError("Unsupported sceneType: " ++ @tagName(sceneType)),
     }
 }
 
-fn generateChapter14(self: *Self) void {
+fn generateChapter2(self: *Self) void {
     var prng = DefaultPrng.init(self.seed);
 
     // Materials and objects
     // Ground
-    const matGround = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 0.5, 0.5, 0.5 } },
-    );
-    self.append(Object.init(.sphere, .{
-        .center = Point3{ 0, -1000, 0 },
-        .radius = 1000,
-        .mat = matGround,
-    }));
+    const matGround = Material.init(Lambertian{ .albedo = Color3{ 0.5, 0.5, 0.5 } });
+    self.append(Object.init(Sphere.init(Point3{ 0, -1000, 0 }, 1000, matGround)));
 
     // Generate random spheres and materials
     for (0..22) |a| {
@@ -94,150 +89,48 @@ fn generateChapter14(self: *Self) void {
 
             if (Vec.len(center - Point3{ 4, 0.2, 0 }) > 0.9) {
                 // 5% chance of glass
-                var sphereMaterial = Material.init(.dielectric, .{
-                    .refractionIndex = 1.5,
-                });
+                var sphereMaterial = Material.init(Dielectric{ .refractionIndex = 1.5 });
 
                 if (chooseMat < 0.8) {
                     // 80% is diffuse material
                     const albedo = Vec.random(&prng) * Vec.random(&prng);
-                    sphereMaterial = Material.init(.lambertian, .{
-                        .albedo = albedo,
-                    });
+                    sphereMaterial = Material.init(Lambertian{ .albedo = albedo });
                 } else if (chooseMat < 0.95) {
                     // 15% metal
                     const albedo = Vec.randomRange(0.5, 1, &prng);
                     const fuzz = util.randomDoubleRange(0, 0.5, &prng);
-                    sphereMaterial = Material.init(.metal, .{
-                        .albedo = albedo,
-                        .fuzz = fuzz,
-                    });
+                    sphereMaterial = Material.init(Metal{ .albedo = albedo, .fuzz = fuzz });
                 }
 
-                self.append(Object.init(.sphere, .{
-                    .center = center,
-                    .radius = 0.2,
-                    .mat = sphereMaterial,
-                }));
+                self.append(Object.init(Sphere.init(center, 0.2, sphereMaterial)));
             }
         }
     }
 
-    const mat1 = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.5 },
-    );
-    self.append(Object.init(
-        .sphere,
-        .{ .center = Point3{ 0, 1, 0 }, .radius = 1, .mat = mat1 },
-    ));
+    const mat1 = Material.init(Dielectric{ .refractionIndex = 1.5 });
+    self.append(Object.init(Sphere.init(Point3{ 0, 1, 0 }, 1, mat1)));
 
-    const mat2 = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 0.4, 0.2, 0.1 } },
-    );
-    self.append(Object.init(
-        .sphere,
-        .{ .center = Point3{ -4, 1, 0 }, .radius = 1, .mat = mat2 },
-    ));
+    const mat2 = Material.init(Lambertian{ .albedo = Color3{ 0.4, 0.2, 0.1 } });
+    self.append(Object.init(Sphere.init(Point3{ -4, 1, 0 }, 1, mat2)));
 
-    const mat3 = Material.init(
-        .metal,
-        .{ .albedo = Color3{ 0.7, 0.6, 0.5 }, .fuzz = 0 },
-    );
-    self.append(Object.init(
-        .sphere,
-        .{ .center = Point3{ 4, 1, 0 }, .radius = 1, .mat = mat3 },
-    ));
-}
-
-fn generateChapter13(self: *Self) []Object {
-    const matGround = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 0.8, 0.8, 0.0 } },
-    );
-    self.append(Object.init(.sphere, .{
-        .center = Point3{ 0, -100.5, -1 },
-        .radius = 100,
-        .mat = matGround,
-    }));
-
-    const matCenter = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 0.1, 0.2, 0.5 } },
-    );
-    self.append(Object.init(
-        .sphere,
-        .{ .center = Point3{ 0, 0, -1.2 }, .radius = 0.5, .mat = matCenter },
-    ));
-
-    const matLeft = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.5 },
-    );
-    self.append(Object.init(
-        .sphere,
-        .{ .center = Point3{ -1, 0, -1 }, .radius = 0.5, .mat = matLeft },
-    ));
-
-    const matBubble = Material.init(
-        .dielectric,
-        .{ .refractionIndex = 1.0 / 1.5 },
-    );
-    self.append(Object.init(
-        .sphere,
-        .{ .center = Point3{ -1, 0, -1 }, .radius = 0.4, .mat = matBubble },
-    ));
-
-    const matRight = Material.init(
-        .metal,
-        .{ .albedo = Color3{ 0.8, 0.6, 0.2 }, .fuzz = 1 },
-    );
-    self.append(Object.init(
-        .sphere,
-        .{ .center = Point3{ 1, 0, -1 }, .radius = 0.5, .mat = matRight },
-    ));
-}
-
-test "Scene" {
-    const alloc = std.testing.allocator;
-    const seed = 0xabadcafe;
-
-    const size = @intFromEnum(SceneType.chapter14);
-    const world = try alloc.alloc(Object, size);
-    defer alloc.free(world);
-
-    var scene = Self{ .seed = seed, .world = world };
-
-    // At first, the world is empty (but the slice has max length)
-    try std.testing.expectEqual(0, scene.len);
-    try std.testing.expectEqual(size, scene.world.len);
-
-    scene.generateScene(.chapter14);
-
-    // The world should not be empty and should contain all elements
-    try std.testing.expectEqual(size - 3, scene.len);
-    try std.testing.expectEqual(size - 3, scene.objects().len);
-    try std.testing.expectEqualDeep(Interval.init(1e-3, inf), scene.interval);
+    const mat3 = Material.init(Metal{ .albedo = Color3{ 0.7, 0.6, 0.5 }, .fuzz = 0 });
+    self.append(Object.init(Sphere.init(Point3{ 4, 1, 0 }, 1, mat3)));
 }
 
 test "Scene.hit()" {
     const alloc = std.testing.allocator;
     const seed = 0xabadcafe;
 
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 }, },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 }, });
 
     const world = try alloc.alloc(Object, 4);
     defer alloc.free(world);
 
     var scene = Self{ .seed = seed, .world = world };
-    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -2 }, .radius = 1.0, .mat = mat }));
-    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -3 }, .radius = 1.0, .mat = mat }));
-    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -4 }, .radius = 1.0, .mat = mat }));
-    scene.append(Object.init(.sphere, .{ .center = Vec3{ 0, 0, -5 }, .radius = 1.0, .mat = mat }));
+    scene.append(Object.init(Sphere.init(Point3{ 0, 0, -2 }, 1.0, mat)));
+    scene.append(Object.init(Sphere.init(Point3{ 0, 0, -3 }, 1.0, mat)));
+    scene.append(Object.init(Sphere.init(Point3{ 0, 0, -4 }, 1.0, mat)));
+    scene.append(Object.init(Sphere.init(Point3{ 0, 0, -5 }, 1.0, mat)));
 
     const ray: Ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     const maybeHit = scene.hit(ray, Interval.init(-6, 6));

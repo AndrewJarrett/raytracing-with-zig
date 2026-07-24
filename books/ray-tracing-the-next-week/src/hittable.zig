@@ -10,6 +10,7 @@ const Point3 = @import("vec.zig").Point3;
 const Ray = @import("ray.zig").Ray;
 const Sphere = @import("sphere.zig").Sphere;
 const Vec3 = @import("vec.zig").Vec3;
+const Lambertian = @import("material.zig").Lambertian;
 
 pub const Hit = struct {
     point: Point3,
@@ -26,9 +27,10 @@ pub const Shape = enum {
 pub const Object = union(Shape) {
     sphere: Sphere,
 
-    pub fn init(shape: Shape, args: anytype) Object {
-        return switch (shape) {
-            inline .sphere => .{ .sphere = Sphere.init(args.center, args.radius, args.mat) },
+    pub fn init(shape: anytype) Object {
+        return switch (@TypeOf(shape)) {
+            Sphere => .{ .sphere = shape },
+            else => @compileError("Unknown shape: " ++ @typeName(@TypeOf(shape))),
         };
     }
 
@@ -42,10 +44,7 @@ pub const Object = union(Shape) {
 test "Hit" {
     const p = Point3{ 0, 0, 0 };
     const v = Vec3{ 0, 1, 0 };
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
     const t = 0.5;
     const rec: Hit = .{ .point = p, .normal = v, .mat = mat, .t = t, .front = true };
 
@@ -64,26 +63,22 @@ test "Shape" {
 test "Object.init()" {
     const center = Point3{ 0, 0, 0 };
     const radius = 1.0;
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
-    const object = Object.init(.sphere, .{ .center = center, .radius = radius, .mat = mat });
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
+    const object = Object.init(Sphere.init(center, radius, mat));
 
     try std.testing.expectEqual("sphere", @tagName(object));
-    try std.testing.expectEqual(center, object.sphere.center);
+    try std.testing.expectEqual(center, object.sphere.center.orig);
+    try std.testing.expectEqual(Vec3{ 0, 0, 0 }, object.sphere.center.dir);
+    try std.testing.expectEqual(0, object.sphere.center.time);
     try std.testing.expectEqual(radius, object.sphere.radius);
 }
 
 test "Object.hit()" {
     const center = Point3{ 0, 0, -2 };
     const radius = 1.0;
-    const mat = Material.init(
-        .lambertian,
-        .{ .albedo = Color3{ 1, 1, 1 } },
-    );
+    const mat = Material.init(Lambertian{ .albedo = Color3{ 1, 1, 1 } });
     const sphere = Sphere.init(center, radius, mat);
-    const object = Object.init(.sphere, sphere);
+    const object = Object.init(sphere);
 
     const ray = Ray{ .orig = Vec3{ 0, 0, 0 }, .dir = Vec3{ 0, 0, -1 } };
     const hit = object.hit(ray, Interval.init(0.0, 3.0));

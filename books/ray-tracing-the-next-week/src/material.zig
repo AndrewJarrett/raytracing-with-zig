@@ -14,37 +14,24 @@ pub const Scatter = struct {
 };
 
 pub const Lambertian = struct {
-    albedo: Color3,
+    albedo: Color3 = Color3{ 1, 1, 1 },
 
-    pub fn init(albedo: Color3) Lambertian {
-        return .{
-            .albedo = albedo,
-        };
-    }
-
-    pub fn scatter(self: Lambertian, rec: Hit, prng: *DefaultPrng) ?Scatter {
+    pub fn scatter(self: Lambertian, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         var dir = rec.normal + Vec.randomUnitVec(prng);
         if (Vec.nearZero(dir)) {
             dir = rec.normal;
         }
 
         return .{
-            .scattered = Ray{ .orig = rec.point, .dir = dir },
+            .scattered = Ray{ .orig = rec.point, .dir = dir, .time = ray.time },
             .attenuation = self.albedo,
         };
     }
 };
 
 pub const Metal = struct {
-    albedo: Color3,
-    fuzz: f64,
-
-    pub fn init(albedo: Color3, fuzz: f64) Metal {
-        return .{
-            .albedo = albedo,
-            .fuzz = fuzz,
-        };
-    }
+    albedo: Color3 = Color3{ 1, 1, 1 },
+    fuzz: f64 = 0,
 
     pub fn scatter(self: Metal, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         var s: ?Scatter = null;
@@ -54,7 +41,7 @@ pub const Metal = struct {
 
         if (Vec.dot(reflected, rec.normal) > 0) {
             s = .{
-                .scattered = Ray{ .orig = rec.point, .dir = reflected },
+                .scattered = Ray{ .orig = rec.point, .dir = reflected, .time = ray.time },
                 .attenuation = self.albedo,
             };
         }
@@ -63,13 +50,7 @@ pub const Metal = struct {
 };
 
 pub const Dielectric = struct {
-    refractionIndex: f64,
-
-    pub fn init(refractionIndex: f64) Dielectric {
-        return .{
-            .refractionIndex = refractionIndex,
-        };
-    }
+    refractionIndex: f64 = 1.0,
 
     pub fn scatter(self: Dielectric, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         const refract = if (rec.front)
@@ -89,7 +70,7 @@ pub const Dielectric = struct {
             Vec.refract(unitDir, rec.normal, refract);
 
         return .{
-            .scattered = Ray{ .orig = rec.point, .dir = direction },
+            .scattered = Ray{ .orig = rec.point, .dir = direction, .time = ray.time },
             .attenuation = Color3{ 1, 1, 1 },
         };
     }
@@ -108,34 +89,23 @@ pub const MaterialType = enum {
     dielectric,
 };
 
-pub const MaterialArgs = struct {
-    albedo: Color3 = Color3{ 1, 1, 1 },
-    fuzz: f64 = 0,
-    refractionIndex: f64 = 1.0,
-};
-
 pub const Material = union(MaterialType) {
     lambertian: Lambertian,
     metal: Metal,
     dielectric: Dielectric,
 
-    pub fn init(mat: MaterialType, args: MaterialArgs) Material {
-        return switch (mat) {
-            .lambertian => .{
-                .lambertian = Lambertian.init(args.albedo),
-            },
-            .metal => .{
-                .metal = Metal.init(args.albedo, args.fuzz),
-            },
-            .dielectric => .{
-                .dielectric = Dielectric.init(args.refractionIndex),
-            },
+    pub fn init(mat: anytype) Material {
+        return switch (@TypeOf(mat)) {
+            Lambertian => .{ .lambertian = mat },
+            Metal => .{ .metal = mat },
+            Dielectric => .{ .dielectric = mat },
+            else => @compileError("Unknown material: " ++ @typeName(@TypeOf(mat))),
         };
     }
 
     pub fn scatter(self: Material, ray: Ray, rec: Hit, prng: *DefaultPrng) ?Scatter {
         return switch (self) {
-            .lambertian => |l| l.scatter(rec, prng),
+            .lambertian => |l| l.scatter(ray, rec, prng),
             .metal => |m| m.scatter(ray, rec, prng),
             .dielectric => |d| d.scatter(ray, rec, prng),
         };
@@ -159,13 +129,14 @@ test "Lambertian" {
     var prng = DefaultPrng.init(seed);
     var otherPrng = DefaultPrng.init(seed);
 
-    const lam = Lambertian.init(albedo);
+    const lam = Lambertian{ .albedo = albedo };
     const normal = Vec3{ 0, 0, 1 };
     const s = lam.scatter(
+        Ray{},
         Hit{
             .point = Vec3{ 0, 0, -1 },
             .normal = normal,
-            .mat = Material.init(.lambertian, .{ .albedo = albedo }),
+            .mat = Material.init(Lambertian{ .albedo = albedo }),
             .t = 0,
             .front = true,
         },
@@ -183,7 +154,7 @@ test "Metal" {
     const albedo = Color3{ 1, 1, 1 };
     var prng = DefaultPrng.init(0xabadcafe);
 
-    const metal = Metal.init(albedo, 0);
+    const metal = Metal{ .albedo = albedo, .fuzz = 0 };
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = metal.scatter(
@@ -191,7 +162,7 @@ test "Metal" {
         Hit{
             .point = point,
             .normal = normal,
-            .mat = Material.init(.metal, .{ .albedo = albedo, .fuzz = 0 }),
+            .mat = Material.init(Metal{ .albedo = albedo, .fuzz = 0 }),
             .t = 0,
             .front = true,
         },
@@ -209,7 +180,7 @@ test "Dielectric" {
     const refract = 1.50;
     var prng = DefaultPrng.init(0xabadcafe);
 
-    const dielectric = Dielectric.init(refract);
+    const dielectric = Dielectric{ .refractionIndex = refract };
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = dielectric.scatter(
@@ -217,7 +188,7 @@ test "Dielectric" {
         Hit{
             .point = point,
             .normal = normal,
-            .mat = Material.init(.dielectric, .{ .refractionIndex = refract }),
+            .mat = Material.init(Dielectric{ .refractionIndex = refract }),
             .t = 0,
             .front = true,
         },
@@ -242,7 +213,7 @@ test "Material" {
     const albedo = Color3{ 1, 1, 1 };
     var prng = DefaultPrng.init(0xabadcafe);
 
-    const mat = Material.init(.metal, .{ .albedo = albedo, .fuzz = 0 });
+    const mat = Material.init(Metal{ .albedo = albedo, .fuzz = 0 });
     const normal = Vec3{ 0, 0, 1 };
     const point = Vec3{ 0, 0, -1 };
     const s = mat.scatter(

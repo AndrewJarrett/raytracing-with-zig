@@ -7,8 +7,8 @@ const Vec = @import("vec.zig").Vec;
 const Vec3 = @import("vec.zig").Vec3;
 
 pub const Ray = struct {
-    orig: Point3,
-    dir: Vec3,
+    orig: Point3 = Point3{ 0, 0, 0 },
+    dir: Vec3 = Vec3{ 0, 0, 0 },
     time: f64 = 0,
 
     pub inline fn at(self: Ray, t: f64) Vec3 {
@@ -16,12 +16,12 @@ pub const Ray = struct {
     }
 
     pub fn format(self: *const Ray, writer: anytype) !void {
-        try writer.print("{any} -> {any}", .{ self.orig, self.dir });
+        try writer.print("{any} -> {any} @ time: {d}", .{ self.orig, self.dir, self.time });
     }
 };
 
 test "Ray" {
-    const ray = Ray{ .orig = Point3{ 0, 0, 0 }, .dir = Vec3{ 1, 2, 3 } };
+    const ray = Ray{ .dir = Vec3{ 1, 2, 3 } };
 
     try std.testing.expectEqual(0, ray.orig[0]);
     try std.testing.expectEqual(0, ray.orig[1]);
@@ -35,9 +35,8 @@ test "Ray" {
 }
 
 test "at()" {
-    const orig = Point3{ 0, 0, 0 };
     const dir = Vec3{ 1, 2, 3 };
-    const ray = Ray{ .orig = orig, .dir = dir, .time = 0.5 };
+    const ray = Ray{ .dir = dir, .time = 0.5 };
     const t = 1.0;
 
     const expected = Vec3{ 1, 2, 3 };
@@ -47,10 +46,9 @@ test "at()" {
 
 test "format()" {
     const orig = Point3{ 0.1, 0.9, 0.5 };
-    const dir = Vec3{ 1.0, 2.0, 3.0 };
-    const ray = Ray{ .orig = orig, .dir = dir };
+    const ray = Ray{ .orig = orig, };
 
-    const expected = "{ 0.1, 0.9, 0.5 } -> { 1, 2, 3 }";
+    const expected = "{ 0.1, 0.9, 0.5 } -> { 0, 0, 0 } @ time: 0";
     var buffer: [50]u8 = undefined;
     const actual = try std.fmt.bufPrint(buffer[0..50], "{f}", .{ray});
 

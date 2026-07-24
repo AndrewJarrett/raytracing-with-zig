@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     const imgWidth = b.option(u16, "imgWidth", "width of the image in pixels (default 1200)") orelse 1200;
     const samplesPerPixel = b.option(u16, "samplesPerPixel", "samples per pixel to use (default 500)") orelse 500;
     const aspectRatio = b.option(f64, "aspectRatio", "aspect ratio to use (default 16/9)") orelse (16.0 / 9.0);
-    const fileName = b.option([]const u8, "fileName", "name of the file to save (default chapter14.ppm)") orelse "chapter14.ppm";
+    const fileName = b.option([]const u8, "fileName", "name of the file to save (default chapter2.ppm)") orelse "chapter2.ppm";
     const seed = b.option(u64, "seed", "an optional random seed to use for deterministic results (default null)") orelse null;
     const chunkSize = b.option(u8, "chunkSize", "the amount of rows to process at one time. Less is more balanced, higher may be slightly faster (default 4)") orelse 4;
     const logLevel = b.option(std.log.Level, "logLevel", "the default logging level to output (default .Debug = '.debug', .ReleaseSate, .ReleaseFast, .ReleaseSmall = '.info')") orelse std.log.default_level;

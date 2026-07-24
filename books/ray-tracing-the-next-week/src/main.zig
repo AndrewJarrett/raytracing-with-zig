@@ -33,10 +33,10 @@ pub fn main(init: std.process.Init) !void {
     var threaded = std.Io.Threaded.init(gpa, .{});
     defer threaded.deinit();
 
-    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter14));
+    const world = try alloc.alloc(Object, @intFromEnum(SceneType.chapter2));
     defer alloc.free(world);
     var scene = Scene{ .seed = seed, .world = world };
-    scene.generateScene(.chapter14);
+    scene.generateScene(.chapter2);
 
     // Create Image
     const height = Image.getHeightFromWidthAndRatio(config.imgWidth, config.aspectRatio);
@@ -84,13 +84,13 @@ test "main" {
     const io = std.testing.io;
     const gpa = std.testing.allocator;
 
-    const world = try gpa.alloc(Object, @intFromEnum(SceneType.chapter14));
+    const world = try gpa.alloc(Object, @intFromEnum(SceneType.chapter2));
     defer gpa.free(world);
 
     // Use or generate a common seed
     const seed = initSeed(io);
     var scene = Scene{ .seed = seed, .world = world };
-    scene.generateScene(.chapter14);
+    scene.generateScene(.chapter2);
 
     const height = Image.getHeightFromWidthAndRatio(config.imgWidth, config.aspectRatio);
     const size = @as(u32, config.imgWidth) * @as(u32, height);
